@@ -32,10 +32,30 @@ class ReactomeDatabase:
   snap=self.create_staging_snapshot();raw=snap/"raw"
   try:
    for name in CORE_FILES:shutil.copy2(Path(source)/name,raw/name)
-   validate_reactome_core(raw);files=[{"filename":n,"size":(raw/n).stat().st_size,"sha256":_sha(raw/n),"source_url":f"{BASE_URL}/{n}"} for n in CORE_FILES]
-   m=self.manifest(snap);m.update(status=DatabaseState.READY,download_completed_at=_now(),retrieved_at=_now(),files=files);self._write_manifest(snap,m);self._atomic_json(self.active_pointer,{"snapshot_id":snap.name,"activated_at":_now()});return snap
+   return self.finalize_snapshot(snap)
   except Exception as e:
-   m=self.manifest(snap);m.update(status=DatabaseState.ERROR,last_error=str(e));self._write_manifest(snap,m);raise
+   if self.manifest(snap).get("status")!=DatabaseState.ERROR:self.mark_error(snap,str(e))
+   raise
+ def finalize_snapshot(self,snap:Path)->Path:
+  try:
+   raw=Path(snap)/"raw";validate_reactome_core(raw);files=[{"filename":n,"size":(raw/n).stat().st_size,"sha256":_sha(raw/n),"source_url":f"{BASE_URL}/{n}"} for n in CORE_FILES]
+   completed=_now();m=self.manifest(snap);m.update(status=DatabaseState.READY,download_completed_at=completed,retrieved_at=completed,files=files);self._write_manifest(snap,m);self._atomic_json(self.active_pointer,{"snapshot_id":Path(snap).name,"activated_at":completed});return Path(snap)
+  except Exception as e:
+   self.mark_error(Path(snap),str(e));raise
+ def mark_error(self,snap:Path,message:str)->None:
+  m=self.manifest(snap);m.update(status=DatabaseState.ERROR,last_error=message);self._write_manifest(snap,m)
+ def mark_downloading(self,snap:Path)->None:
+  m=self.manifest(snap);m.update(status=DatabaseState.DOWNLOADING);self._write_manifest(snap,m)
+ def mark_incomplete(self,snap:Path)->None:
+  m=self.manifest(snap);m.update(status=DatabaseState.INCOMPLETE);self._write_manifest(snap,m)
+ def state(self):
+  if self.is_core_ready():return DatabaseState.READY
+  manifests=sorted(self.snapshots.glob("*/manifest.json"),reverse=True) if self.snapshots.exists() else []
+  if not manifests:return DatabaseState.NOT_INSTALLED
+  try:
+   state=DatabaseState(json.loads(manifests[0].read_text(encoding="utf-8")).get("status",DatabaseState.ERROR))
+   return DatabaseState.INCOMPLETE if state==DatabaseState.CANCELLED else state
+  except (OSError,ValueError,json.JSONDecodeError):return DatabaseState.ERROR
  def active_snapshot(self):
   try:
    snap=self.snapshots/json.loads(self.active_pointer.read_text(encoding="utf-8"))["snapshot_id"]
