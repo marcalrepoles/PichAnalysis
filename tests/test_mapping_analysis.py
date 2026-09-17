@@ -38,7 +38,7 @@ def test_analysis_blocked_without_primary_identifier(tmp_path):
     set_organism(project, "Homo sapiens", "9606")
     state = mapping_readiness(project)
     assert not state.ready
-    assert "identificador principal" in state.reason.lower()
+    assert "primary identifier" in state.reason.lower()
 
 
 def test_analysis_blocked_without_organism(tmp_path):

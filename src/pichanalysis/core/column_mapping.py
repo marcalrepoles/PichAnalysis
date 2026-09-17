@@ -136,9 +136,9 @@ def validate_mapping(columns: dict[str, dict[str, Any]]) -> MappingValidation:
     identifiers = [(name, item) for name, item in columns.items() if item.get("role") == ColumnRole.IDENTIFIER.value]
     primary = [name for name, item in identifiers if item.get("primary_identifier")]
     if not primary:
-        errors.append("Nenhum identificador principal selecionado.")
+        errors.append("No primary identifier selected.")
     elif len(primary) > 1:
-        errors.append("Selecione somente um identificador principal.")
+        errors.append("Select only one primary identifier.")
     for name, item in identifiers:
         if item.get("identifier_type", IdentifierType.UNKNOWN.value) == IdentifierType.UNKNOWN.value:
             errors.append(f"A coluna {name} foi marcada como Identifier mas não possui tipo definido.")
@@ -151,7 +151,7 @@ def validate_mapping(columns: dict[str, dict[str, Any]]) -> MappingValidation:
         condition = str(item.get("condition", "")).strip()
         replicate = str(item.get("replicate", "")).strip()
         if not condition:
-            errors.append(f"A coluna {name} é Quantification mas não possui condição.")
+            errors.append(f"Column {name} is Quantification but has no condition.")
         if condition and replicate:
             key = (condition.casefold(), replicate.casefold())
             if key in combinations:

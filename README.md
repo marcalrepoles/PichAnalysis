@@ -138,5 +138,15 @@ for human and mouse. Runs record R, GO.db, and OrgDb versions and preserve long
 annotations, unannotated proteins, per-ontology tables, workbook, plots,
 metadata, and immutable script snapshots under `analyses/GO/`.
 
-This release deliberately does not provide KEGG, Reactome, MitoCarta, STRING,
-differential analysis, or other later biological modules.
+This release deliberately does not provide KEGG scientific analysis, Reactome,
+MitoCarta, STRING, differential analysis, or other later biological modules.
+
+## Database Manager
+
+The **Database Manager** page is available without an open analysis project. It installs or updates a local Homo sapiens (`hsa`, NCBI Taxonomy ID 9606) KEGG snapshot containing normalized core tables and, optionally, pathway entries, KGML files, and PNG images.
+
+Data is stored in the operating system's per-user application-data directory, outside projects and the source tree. Each update uses a new snapshot. `active.json` changes atomically only after completion, so a failed or cancelled update cannot replace a working database. Incomplete downloads can resume and skip valid completed files.
+
+KEGG REST access is centrally limited to at most three calls per second with bounded retries. The application displays an academic-use notice before the first download. Review <https://www.kegg.jp/kegg/rest/> and <https://www.kegg.jp/kegg/legal.html>.
+
+For a small online smoke check, use a temporary root and call `DatabaseManager.download(..., pathway_subset=["hsa00010", "hsa00020"])`. Automated tests use fake responses and never write to the production database directory.

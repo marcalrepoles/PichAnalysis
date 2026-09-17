@@ -57,7 +57,7 @@ class RRuntime:
 
     def command(self, script: Path, *arguments: str) -> tuple[str, ...]:
         if not self.executable:
-            raise RuntimeError("Rscript não foi encontrado no PATH nem nas instalações padrão.")
+            raise RuntimeError("Rscript was not found on PATH or in standard installations.")
         return (self.executable, str(Path(script)), *(str(value) for value in arguments))
 
     def run(self, script: Path, *arguments: str, timeout: int = 60) -> RResult:
@@ -66,7 +66,7 @@ class RRuntime:
             completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8",
                 errors="replace", timeout=timeout, check=False, shell=False)
         except (OSError, subprocess.TimeoutExpired) as error:
-            raise RuntimeError(f"Falha ao executar Rscript: {error}") from error
+            raise RuntimeError(f"Failed to run Rscript: {error}") from error
         return RResult(command, completed.returncode, completed.stdout, completed.stderr)
 
     def version(self) -> str | None:

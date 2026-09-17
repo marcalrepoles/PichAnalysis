@@ -29,6 +29,7 @@ from ..core.project import Project, ProjectError, create_project, open_project
 from ..core.r_runtime import RRuntime
 from .analyses_page import AnalysesPage
 from .data_page import DataPage
+from .database_manager_page import DatabaseManagerPage
 from .mapping_worker import MappingWorker
 from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
@@ -51,13 +52,14 @@ class MainWindow(QMainWindow):
         self.go_worker: MappingWorker | None = None
         self.project_page = ProjectPage()
         self.data_page = DataPage()
+        self.database_manager_page = DatabaseManagerPage()
         self.analyses_page = AnalysesPage()
         self.scripts_page = ScriptsPage(APPLICATION_ROOT / "r_scripts", self.runtime)
         self.navigation = QListWidget()
-        self.navigation.addItems(["Projeto", "Dados", "Análises", "Scripts / Logs"])
+        self.navigation.addItems(["Project", "Data", "Analyses", "Database Manager", "Scripts / Logs"])
         self.navigation.setFixedWidth(170)
         self.pages = QStackedWidget()
-        for page in (self.project_page, self.data_page, self.analyses_page, self.scripts_page):
+        for page in (self.project_page, self.data_page, self.analyses_page, self.database_manager_page, self.scripts_page):
             self.pages.addWidget(page)
         container = QWidget()
         layout = QHBoxLayout(container)
@@ -101,10 +103,10 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         if ((self.mapping_worker and self.mapping_worker.isRunning()) or
                 (self.presence_worker and self.presence_worker.isRunning()) or
-                (self.go_worker and self.go_worker.isRunning())):
+                (self.go_worker and self.go_worker.isRunning()) or self.database_manager_page.is_running()):
             QMessageBox.information(
-                self, "Análise em execução",
-                "Aguarde o término do mapeamento antes de fechar o PichAnalysis.",
+                self, "Operation in progress",
+                "Wait for the current analysis or database download before closing PichAnalysis.",
             )
             event.ignore()
             return
@@ -172,32 +174,32 @@ class MainWindow(QMainWindow):
         name, accepted = QInputDialog.getText(self, "Novo projeto", "Nome do projeto:")
         if not accepted or not name.strip():
             return
-        parent = QFileDialog.getExistingDirectory(self, "Escolha a pasta onde criar o projeto")
+        parent = QFileDialog.getExistingDirectory(self, "Choose the folder where the project will be created")
         if not parent:
             return
         try:
-            self._activate_project(create_project(Path(parent), name), "Projeto criado")
+            self._activate_project(create_project(Path(parent), name), "Project created")
         except ProjectError as error:
-            QMessageBox.warning(self, "Não foi possível criar", str(error))
+            QMessageBox.warning(self, "Could not create project", str(error))
 
     def _open_project(self) -> None:
-        directory = QFileDialog.getExistingDirectory(self, "Abrir projeto PichAnalysis")
+        directory = QFileDialog.getExistingDirectory(self, "Open PichAnalysis project")
         if not directory:
             return
         try:
-            self._activate_project(open_project(Path(directory)), "Projeto aberto")
+            self._activate_project(open_project(Path(directory)), "Project opened")
         except ProjectError as error:
-            QMessageBox.warning(self, "Projeto inválido", str(error))
+            QMessageBox.warning(self, "Invalid project", str(error))
 
     def _open_folder(self) -> None:
         if self.project and not QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root))):
-            QMessageBox.warning(self, "Pasta", "Não foi possível abrir a pasta do projeto.")
+            QMessageBox.warning(self, "Folder", "Could not open the project folder.")
 
     def _import_data(self) -> None:
         if not self.project:
             return
         filename, _ = QFileDialog.getOpenFileName(
-            self, "Importar tabela", "", "Tabelas (*.xlsx *.csv *.tsv)"
+            self, "Import table", "", "Tables (*.xlsx *.csv *.tsv)"
         )
         if not filename:
             return
@@ -208,7 +210,7 @@ class MainWindow(QMainWindow):
                 sheets = xlsx_sheets(source)
                 if len(sheets) > 1:
                     sheet, accepted = QInputDialog.getItem(
-                        self, "Escolher planilha", "Planilha:", sheets, 0, False
+                        self, "Choose worksheet", "Worksheet:", sheets, 0, False
                     )
                     if not accepted:
                         return
@@ -219,7 +221,7 @@ class MainWindow(QMainWindow):
             self.navigation.setCurrentRow(1)
         except (ImportError, ProjectError) as error:
             self.logger.exception("Erro de importação")
-            QMessageBox.warning(self, "Falha na importação", str(error))
+            QMessageBox.warning(self, "Import failed", str(error))
 
     def _save_mapping(self, columns: dict) -> None:
         if not self.project:
@@ -234,7 +236,7 @@ class MainWindow(QMainWindow):
             self.analyses_page.set_project(self.project)
         except ProjectError as error:
             self.logger.exception("Erro ao salvar configuração de colunas")
-            QMessageBox.warning(self, "Configuração", str(error))
+            QMessageBox.warning(self, "Configuration", str(error))
 
     def _save_organism(self, name: str, tax_id: str) -> None:
         if not self.project:
@@ -242,8 +244,8 @@ class MainWindow(QMainWindow):
         current = get_organism(self.project)
         changing = current and (current.name != name.strip() or current.tax_id != tax_id.strip())
         if changing and has_biological_results(self.project):
-            answer = QMessageBox.question(self, "Alterar organismo",
-                "Já existem resultados biológicos. Alterar o organismo invalida esses resultados. Deseja continuar?")
+            answer = QMessageBox.question(self, "Change organism",
+                "Biological results already exist. Changing the organism invalidates them. Continue?")
             if answer != QMessageBox.StandardButton.Yes:
                 return
         try:
@@ -251,7 +253,7 @@ class MainWindow(QMainWindow):
             self.logger.info("Organismo configurado: %s (%s)", name.strip(), tax_id.strip())
             self.analyses_page.set_project(self.project)
         except (ValueError, ProjectError) as error:
-            QMessageBox.warning(self, "Organismo", str(error))
+            QMessageBox.warning(self, "Organism", str(error))
 
     def _run_mapping(self, refresh: bool) -> None:
         if not self.project or self.mapping_worker:
@@ -260,7 +262,7 @@ class MainWindow(QMainWindow):
         try:
             arguments = build_mapping_arguments(self.project, cache_path(), refresh, run_id)
         except ValueError as error:
-            QMessageBox.warning(self, "Mapeamento", str(error))
+            QMessageBox.warning(self, "Mapping", str(error))
             return
         self.logger.info("Mapeamento iniciado run_id=%s organismo=%s tipo=%s cache=%s",
             run_id, self.project.config.get("organism_tax_id"),
@@ -291,18 +293,18 @@ class MainWindow(QMainWindow):
         self.analyses_page.set_running(False)
         self.logger.error("Mapeamento falhou run_id=%s: %s", run_id, message)
         self.scripts_page.result_view.setPlainText(stderr)
-        QMessageBox.warning(self, "Falha no mapeamento", message)
+        QMessageBox.warning(self, "Mapping failed", message)
 
     def _export_mapping(self, filename: str) -> None:
         if not self.project:
             return
         source = self.project.root / "mapping" / "tables" / filename
-        destination, _ = QFileDialog.getSaveFileName(self, "Exportar resultado", filename)
+        destination, _ = QFileDialog.getSaveFileName(self, "Export result", filename)
         if destination:
             try:
                 export_result(source, Path(destination))
             except OSError as error:
-                QMessageBox.warning(self, "Exportação", str(error))
+                QMessageBox.warning(self, "Export", str(error))
 
     def _open_results(self) -> None:
         if self.project:
@@ -315,7 +317,7 @@ class MainWindow(QMainWindow):
         try:
             arguments = build_presence_arguments(self.project, run_id=run_id, **parameters)
         except ValueError as error:
-            QMessageBox.warning(self, "Presença / ausência", str(error)); return
+            QMessageBox.warning(self, "Presence / absence", str(error)); return
         self.logger.info("Presença/ausência iniciada run_id=%s tipo=%s condições=%s threshold=%s zero_ausência=%s",
             run_id, parameters["quantification_type"], len(parameters["selected_conditions"]),
             parameters["threshold"], parameters["zero_is_missing"])
@@ -336,22 +338,22 @@ class MainWindow(QMainWindow):
     def _presence_failed(self, run_id: str, message: str, stderr: str) -> None:
         self.presence_worker=None; self.analyses_page.presence_page.set_running(False)
         self.logger.error("Presença/ausência falhou run_id=%s: %s",run_id,message)
-        self.scripts_page.result_view.setPlainText(stderr); QMessageBox.warning(self,"Falha na análise",message)
+        self.scripts_page.result_view.setPlainText(stderr); QMessageBox.warning(self,"Analysis failed",message)
 
     def _export_presence(self, relative: str) -> None:
         if not self.project:return
         source=self.project.root/"analyses"/"presence_absence"/relative
-        destination,_=QFileDialog.getSaveFileName(self,"Exportar resultado",source.name)
+        destination,_=QFileDialog.getSaveFileName(self,"Export result",source.name)
         if destination:
             try: export_presence(source,Path(destination))
-            except OSError as error: QMessageBox.warning(self,"Exportação",str(error))
+            except OSError as error: QMessageBox.warning(self,"Export",str(error))
 
     def _export_presence_graph(self, source: str) -> None:
         if not source:return
-        destination,_=QFileDialog.getSaveFileName(self,"Exportar gráfico",Path(source).name)
+        destination,_=QFileDialog.getSaveFileName(self,"Export graph",Path(source).name)
         if destination:
             try: export_presence(Path(source),Path(destination))
-            except OSError as error: QMessageBox.warning(self,"Exportação",str(error))
+            except OSError as error: QMessageBox.warning(self,"Export",str(error))
 
     def _open_presence_graphs(self) -> None:
         if self.project: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root/"analyses"/"presence_absence"/"graphs")))
@@ -361,8 +363,8 @@ class MainWindow(QMainWindow):
         run_id=new_run_id()
         try: arguments=prepare_go_arguments(self.project,run_id=run_id,**parameters)
         except ValueError as error:
-            if "não pertencem ao background" in str(error):
-                answer=QMessageBox.question(self,"Target fora do background",str(error)+"\nAjustar o target ao background e continuar?")
+            if "do not belong to the selected background" in str(error):
+                answer=QMessageBox.question(self,"Target outside background",str(error)+"\nRestrict the target to the background and continue?")
                 if answer!=QMessageBox.StandardButton.Yes:return
                 try:arguments=prepare_go_arguments(self.project,run_id=run_id,allow_target_outside_background=True,**parameters)
                 except ValueError as second:QMessageBox.warning(self,"Gene Ontology",str(second));return
@@ -379,14 +381,14 @@ class MainWindow(QMainWindow):
         except RuntimeError as error:QMessageBox.warning(self,"Resultados GO",str(error))
 
     def _go_failed(self,run_id:str,message:str,stderr:str)->None:
-        self.go_worker=None;self.analyses_page.go_page.set_running(False);self.logger.error("GO falhou run_id=%s: %s",run_id,message);self.scripts_page.result_view.setPlainText(stderr);QMessageBox.warning(self,"Falha GO",message)
+        self.go_worker=None;self.analyses_page.go_page.set_running(False);self.logger.error("GO failed run_id=%s: %s",run_id,message);self.scripts_page.result_view.setPlainText(stderr);QMessageBox.warning(self,"GO failed",message)
 
     def _export_go_path(self,source:str)->None:
         if not source:return
-        destination,_=QFileDialog.getSaveFileName(self,"Exportar resultado GO",Path(source).name)
+        destination,_=QFileDialog.getSaveFileName(self,"Export GO result",Path(source).name)
         if destination:
             try:export_go(Path(source),Path(destination))
-            except OSError as error:QMessageBox.warning(self,"Exportação",str(error))
+            except OSError as error:QMessageBox.warning(self,"Export",str(error))
 
     def _open_go(self)->None:
         if self.project:QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root/"analyses"/"GO")))
@@ -399,7 +401,7 @@ class MainWindow(QMainWindow):
             result = self.runtime.run(script, str(output))
             detail = output.read_text(encoding="utf-8") if output.exists() else result.stdout
             if result.returncode != 0:
-                raise RuntimeError(result.stderr or "Rscript terminou com erro.")
+                raise RuntimeError(result.stderr or "Rscript exited with an error.")
             self.scripts_page.result_view.setPlainText(detail)
             self.logger.info("Teste do R concluído")
         except (RuntimeError, OSError) as error:

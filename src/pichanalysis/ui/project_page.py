@@ -9,10 +9,10 @@ class ProjectPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.new_button = QPushButton("Novo projeto")
-        self.open_button = QPushButton("Abrir projeto existente")
-        self.folder_button = QPushButton("Abrir pasta do projeto")
+        self.open_button = QPushButton("Open existing project")
+        self.folder_button = QPushButton("Open project folder")
         self.folder_button.setEnabled(False)
-        self.details = QLabel("Nenhum projeto aberto.")
+        self.details = QLabel("No project is open.")
         self.details.setWordWrap(True)
         layout = QVBoxLayout(self)
         layout.addWidget(self.new_button)
@@ -22,9 +22,8 @@ class ProjectPage(QWidget):
         layout.addStretch()
 
     def show_project(self, project: Project) -> None:
-        imported = project.config.get("input", {}).get("original_file") or "Nenhum"
+        imported = project.config.get("input", {}).get("original_file") or "None"
         self.details.setText(
-            f"Projeto: {project.name}\nPasta: {project.root}\nArquivo importado: {imported}"
+            f"Project: {project.name}\nFolder: {project.root}\nImported file: {imported}"
         )
         self.folder_button.setEnabled(True)
-

@@ -41,11 +41,11 @@ class ScriptsPage(QWidget):
     def refresh_runtime(self, runtime: RRuntime) -> None:
         if runtime.available:
             self.runtime_status.setText(
-                f"Encontrado\nExecutável: {runtime.executable}\nVersão: {runtime.version() or 'não identificada'}"
+                f"Found\nExecutable: {runtime.executable}\nVersion: {runtime.version() or 'unknown'}"
             )
         else:
             self.runtime_status.setText(
-                "Não encontrado. As análises científicas exigirão R e Rscript no PATH."
+                "Not found. Scientific analyses require R and Rscript on PATH."
             )
         self.test_button.setEnabled(runtime.available)
 
@@ -73,4 +73,4 @@ class ScriptsPage(QWidget):
             path = Path(self.script_picker.currentData())
             self.script_view.setPlainText(path.read_text(encoding="utf-8"))
         except OSError as error:
-            self.script_view.setPlainText(f"Não foi possível abrir o script: {error}")
+            self.script_view.setPlainText(f"Could not open the script: {error}")

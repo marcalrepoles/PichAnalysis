@@ -43,8 +43,8 @@ def mapping_readiness(project: Project | None) -> AnalysisReadiness:
     if not design["primary_identifier_column"] or not design["primary_identifier_type"]:
         return AnalysisReadiness(False, "Configure um identificador principal.")
     if not project.config.get("input", {}).get("processed_file"):
-        return AnalysisReadiness(False, "Importe uma tabela antes de mapear.")
-    return AnalysisReadiness(True, "Pronto para mapear e anotar.")
+        return AnalysisReadiness(False, "Import a table before mapping.")
+    return AnalysisReadiness(True, "Ready to map and annotate.")
 
 
 def cache_path() -> Path:
@@ -82,7 +82,7 @@ def read_mapping_outputs(project: Project) -> MappingOutputs:
             pd.read_csv(tables / "ambiguous.csv"),
             json.loads(metadata_path.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as error:
-        raise RuntimeError(f"Resultados de mapeamento ausentes ou inválidos: {error}") from error
+        raise RuntimeError(f"Mapping results are missing or invalid: {error}") from error
 
 
 def export_result(source: Path, destination: Path) -> Path:
@@ -92,4 +92,3 @@ def export_result(source: Path, destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     return destination
-

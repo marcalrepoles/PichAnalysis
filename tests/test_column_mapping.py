@@ -60,14 +60,14 @@ def test_mapping_persists_after_reopen(tmp_path):
 def test_validation_without_identifier():
     result = validate_mapping({"Description": {"role": "annotation"}})
     assert not result.valid
-    assert "Nenhum identificador principal selecionado." in result.errors
+    assert "No primary identifier selected." in result.errors
 
 
 def test_validation_quantification_without_condition():
     columns = valid_columns()
     columns["LFQ Control 1"]["condition"] = ""
     result = validate_mapping(columns)
-    assert any("não possui condição" in error for error in result.errors)
+    assert any("has no condition" in error for error in result.errors)
 
 
 def test_validation_duplicate_condition_replicate():

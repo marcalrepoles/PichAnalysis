@@ -23,29 +23,29 @@ class DataPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._detections: dict[str, dict[str, Any]] = {}
-        self.import_button = QPushButton("Importar XLSX, CSV ou TSV")
+        self.import_button = QPushButton("Import XLSX, CSV, or TSV")
         self.summary = QLabel("Abra ou crie um projeto para importar dados.")
         self.summary.setWordWrap(True)
         self.preview = QTableWidget()
         self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.preview.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.columns = QTableWidget(0, 4)
-        self.columns.setHorizontalHeaderLabels(["Nome", "Tipo", "Preenchidos", "Ausentes"])
+        self.columns.setHorizontalHeaderLabels(["Name", "Type", "Present", "Missing"])
         self.columns.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.columns.horizontalHeader().setStretchLastSection(True)
 
         self.mapping = QTableWidget(0, 8)
         self.mapping.setHorizontalHeaderLabels([
-            "Coluna", "Papel", "Principal", "Tipo de identificador", "Condição",
-            "Réplica", "Tipo de quantificação", "Detecção",
+            "Column", "Role", "Primary", "Identifier type", "Condition",
+            "Replicate", "Quantification type", "Detection",
         ])
         self.mapping.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.mapping.verticalHeader().setVisible(False)
         self.mapping.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.mapping.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
         self.apply_button = QPushButton("Aplicar sugestões automáticas")
-        self.save_button = QPushButton("Salvar e validar configuração")
-        self.status = QLabel("Configuração: Não configurada")
+        self.save_button = QPushButton("Save and validate configuration")
+        self.status = QLabel("Configuration: Not configured")
         self.status.setWordWrap(True)
         self.design_summary = QLabel()
         self.design_summary.setWordWrap(True)
@@ -55,18 +55,18 @@ class DataPage(QWidget):
         preview_layout = QVBoxLayout(preview_page)
         preview_layout.addWidget(QLabel("Pré-visualização (até 200 linhas)"))
         preview_layout.addWidget(self.preview, 3)
-        preview_layout.addWidget(QLabel("Colunas encontradas"))
+        preview_layout.addWidget(QLabel("Detected columns"))
         preview_layout.addWidget(self.columns, 2)
         mapping_page = QWidget()
         mapping_layout = QVBoxLayout(mapping_page)
-        mapping_layout.addWidget(QLabel("Configuração das colunas — as sugestões podem ser corrigidas livremente."))
+        mapping_layout.addWidget(QLabel("Column configuration — suggestions can be freely corrected."))
         mapping_layout.addWidget(self.mapping)
         mapping_layout.addWidget(self.apply_button)
         mapping_layout.addWidget(self.save_button)
         mapping_layout.addWidget(self.status)
         mapping_layout.addWidget(self.design_summary)
         tabs.addTab(preview_page, "Tabela e colunas")
-        tabs.addTab(mapping_page, "Configuração das colunas")
+        tabs.addTab(mapping_page, "Column configuration")
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.import_button)
@@ -89,7 +89,7 @@ class DataPage(QWidget):
         sheet = f" | Planilha: {result.sheet}" if result.sheet else ""
         self.summary.setText(
             f"Arquivo: {result.original_path.name} | Formato: {result.source_format.upper()}"
-            f"{sheet} | Linhas: {len(frame)} | Colunas: {len(frame.columns)}"
+            f"{sheet} | Rows: {len(frame)} | Columns: {len(frame.columns)}"
         )
         preview = frame.head(self.PREVIEW_ROWS)
         self.preview.setRowCount(len(preview))
@@ -181,7 +181,7 @@ class DataPage(QWidget):
 
     def show_validation(self, validation: MappingValidation) -> None:
         if validation.valid:
-            self.status.setText("Configuração: Válida")
+            self.status.setText("Configuration: Valid")
             values = self.mapping_values()
             primary = next(((name, item) for name, item in values.items() if item["primary_identifier"]), None)
             counts = Counter(item["condition"] for item in values.values() if item["role"] == ColumnRole.QUANTIFICATION.value and item["condition"])
@@ -194,7 +194,7 @@ class DataPage(QWidget):
                 lines.extend(f"{condition}: {count} coluna(s) quantitativa(s)" for condition, count in sorted(counts.items()))
             self.design_summary.setText("\n".join(lines))
         else:
-            self.status.setText("Configuração: Inválida\n" + "\n".join(f"• {item}" for item in validation.errors))
+            self.status.setText("Configuration: Invalid\n" + "\n".join(f"• {item}" for item in validation.errors))
             self.design_summary.clear()
         if validation.warnings:
             self.status.setText(self.status.text() + "\nAvisos:\n" + "\n".join(f"• {item}" for item in validation.warnings))

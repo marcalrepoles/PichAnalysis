@@ -50,20 +50,20 @@ class PresencePage(QWidget):
         config = QWidget(); config_layout=QVBoxLayout(config); config_layout.addLayout(form); config_layout.addWidget(self.column_table)
         config_layout.addWidget(QLabel("Método")); config_layout.addWidget(self.method); config_layout.addWidget(self.readiness)
         config_layout.addWidget(self.run_button); config_layout.addWidget(self.progress)
-        self.summary=QLabel("Nenhum resultado disponível."); self.summary.setWordWrap(True)
-        self.filter=QComboBox(); self.filter.addItem("Todas")
+        self.summary=QLabel("No results available."); self.summary.setWordWrap(True)
+        self.filter=QComboBox(); self.filter.addItem("All")
         self.table=QTableWidget()
         self.detail=QPlainTextEdit(); self.detail.setReadOnly(True)
         results=QWidget(); results_layout=QVBoxLayout(results); results_layout.addWidget(self.summary); results_layout.addWidget(self.filter)
         results_layout.addWidget(self.table,1); results_layout.addWidget(self.detail)
-        actions=QHBoxLayout(); self.export_table=QPushButton("Exportar tabela atual..."); self.export_workbook=QPushButton("Exportar workbook...")
+        actions=QHBoxLayout(); self.export_table=QPushButton("Export current table..."); self.export_workbook=QPushButton("Export workbook...")
         actions.addWidget(self.export_table); actions.addWidget(self.export_workbook); results_layout.addLayout(actions)
-        self.graph_picker=QComboBox(); self.graph_image=QLabel("Nenhum gráfico disponível."); self.graph_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.graph_picker=QComboBox(); self.graph_image=QLabel("No graph available."); self.graph_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.graph_image.setMinimumHeight(300); self.graph_image.setScaledContents(False)
-        self.export_graph=QPushButton("Exportar gráfico..."); self.open_graphs=QPushButton("Abrir pasta de gráficos")
+        self.export_graph=QPushButton("Export graph..."); self.open_graphs=QPushButton("Open graphs folder")
         graphs=QWidget(); graph_layout=QVBoxLayout(graphs); graph_layout.addWidget(self.graph_picker); graph_layout.addWidget(self.graph_image,1)
         graph_actions=QHBoxLayout(); graph_actions.addWidget(self.export_graph); graph_actions.addWidget(self.open_graphs); graph_layout.addLayout(graph_actions)
-        tabs=QTabWidget(); tabs.addTab(config,"Configuração"); tabs.addTab(results,"Resultados"); tabs.addTab(graphs,"Gráficos")
+        tabs=QTabWidget(); tabs.addTab(config,"Configuration"); tabs.addTab(results,"Results"); tabs.addTab(graphs,"Graphs")
         layout=QVBoxLayout(self); layout.addWidget(tabs)
         self.quant_type.currentIndexChanged.connect(self._refresh_configuration)
         self.conditions.itemSelectionChanged.connect(self._refresh_method)
@@ -121,14 +121,14 @@ class PresencePage(QWidget):
     def show_outputs(self,outputs:PresenceOutputs) -> None:
         self.outputs=outputs; counts=outputs.metadata.get("classification_counts",{})
         self.summary.setText(f"Linhas analisadas: {outputs.metadata.get('total_entities',0)} | "+" | ".join(f"{k}: {v}" for k,v in counts.items()))
-        self.filter.clear(); self.filter.addItem("Todas"); self.filter.addItems(sorted(counts)); self._fill_table()
+        self.filter.clear(); self.filter.addItem("All"); self.filter.addItems(sorted(counts)); self._fill_table()
         self.graph_picker.clear()
         for path in outputs.graphs: self.graph_picker.addItem(path.stem,str(path))
 
     def _fill_table(self) -> None:
         if not self.outputs:return
         frame=self.outputs.classification; chosen=self.filter.currentText()
-        if chosen and chosen!="Todas": frame=frame[frame["classification"]==chosen]
+        if chosen and chosen!="All": frame=frame[frame["classification"]==chosen]
         self.table.setRowCount(len(frame)); self.table.setColumnCount(len(frame.columns)); self.table.setHorizontalHeaderLabels(list(frame.columns))
         for r,row in enumerate(frame.itertuples(index=False,name=None)):
             for c,value in enumerate(row): self.table.setItem(r,c,QTableWidgetItem("" if value is None else str(value)))
