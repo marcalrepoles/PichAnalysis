@@ -13,6 +13,7 @@ from ..core.column_mapping import experimental_design
 from ..core.mapping_analysis import MappingOutputs, mapping_readiness
 from ..core.organism import COMMON_ORGANISMS, get_organism
 from ..core.project import Project
+from .presence_page import PresencePage
 
 
 class AnalysesPage(QWidget):
@@ -68,7 +69,8 @@ class AnalysesPage(QWidget):
         for button in (self.export_table, self.export_workbook, self.open_results):
             button.setEnabled(False)
             actions.addWidget(button)
-        layout = QVBoxLayout(self)
+        mapping_page = QWidget()
+        layout = QVBoxLayout(mapping_page)
         layout.addWidget(QLabel("Identificação e anotação"))
         layout.addLayout(form)
         layout.addWidget(self.save_organism)
@@ -87,6 +89,12 @@ class AnalysesPage(QWidget):
         self.open_results.clicked.connect(self.open_results_requested)
         self.preview.currentCellChanged.connect(self._show_detail)
         self._organism_mode()
+        self.presence_page = PresencePage()
+        module_tabs = QTabWidget()
+        module_tabs.addTab(mapping_page, "Identificação e anotação")
+        module_tabs.addTab(self.presence_page, "Presença / ausência")
+        outer_layout = QVBoxLayout(self)
+        outer_layout.addWidget(module_tabs)
 
     def _organism_mode(self) -> None:
         custom = self.organism.currentData() is None
@@ -102,6 +110,7 @@ class AnalysesPage(QWidget):
 
     def set_project(self, project: Project | None) -> None:
         self.project = project
+        self.presence_page.set_project(project)
         if project is None:
             self.run_button.setEnabled(False)
             return

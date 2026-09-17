@@ -7,7 +7,7 @@ check_dependencies <- function() {
   if (length(missing)) stop("Pacotes R ausentes: ", paste(missing, collapse = ", "))
 }
 
-parse_arguments <- function(args) {
+parse_arguments <- function(args, required = NULL) {
   if (length(args) %% 2 != 0) stop("Argumentos devem usar pares --nome valor.")
   result <- list()
   for (i in seq(1, length(args), by = 2)) {
@@ -15,7 +15,7 @@ parse_arguments <- function(args) {
     if (key == args[[i]] || !nzchar(key)) stop("Argumento inválido: ", args[[i]])
     result[[key]] <- args[[i + 1]]
   }
-  required <- c("input", "output", "id-column", "id-type", "tax-id", "organism", "cache", "refresh", "run-id", "project")
+  if (is.null(required)) required <- c("input", "output", "id-column", "id-type", "tax-id", "organism", "cache", "refresh", "run-id", "project")
   absent <- required[!required %in% names(result)]
   if (length(absent)) stop("Argumentos ausentes: ", paste(absent, collapse = ", "))
   result
@@ -42,4 +42,3 @@ expand_identifiers <- function(input, id_column, id_type) {
 collapse_values <- function(x) paste(unique(x[!is.na(x) & nzchar(x)]), collapse = ";")
 
 write_json <- function(value, path) jsonlite::write_json(value, path, pretty = TRUE, auto_unbox = TRUE, na = "null")
-

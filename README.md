@@ -95,5 +95,29 @@ Automatic outputs in `mapping/tables/` are:
 - `protein_mapping.xlsx`, with separate Mapping, Protein catalog, Unmapped, and
   Ambiguous worksheets
 
+## Presence/absence and reproducibility
+
+The Presence / absence module uses only columns explicitly configured as
+`Quantification`. Quantification types are never mixed automatically. Detection
+is evaluated on raw imported values using a user-selected threshold; by default,
+zero and missing values are absence and a value greater than zero is presence.
+No normalization or imputation is performed.
+
+Reproducibility can require either a minimum number or a minimum fraction of
+replicates. For two selected conditions, the strict classes include each
+condition's `specific`, `Shared`, and `Sporadic`. Specific requires reproducible
+detection in one condition and no detection in any replicate of the other.
+`Predominantly <condition>` is a separate exploratory label and is never treated
+as specific. Three or more conditions use an explicit reproducible-detection
+pattern instead of invented pairwise classes.
+
+Each run preserves tables, metadata, parameters, R session information, and the
+scripts used. Latest outputs include the binary presence matrix, original
+quantitative values, condition-level detection, classification, condition
+summary, and an Excel workbook. R also generates protein counts per replicate,
+an UpSet-style intersection plot, a bounded binary heatmap, and—for two
+conditions—a detection-fraction scatter plot. This module does not perform
+differential statistical testing.
+
 This release deliberately does not provide identifier mapping, statistics, GO,
 KEGG, STRING, differential analysis, or other biological analyses.

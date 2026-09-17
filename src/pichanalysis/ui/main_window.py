@@ -21,6 +21,9 @@ from ..core.mapping_analysis import (
     build_mapping_arguments, cache_path, export_result, new_run_id, read_mapping_outputs,
 )
 from ..core.organism import get_organism, has_biological_results, set_organism
+from ..core.presence_analysis import (
+    build_presence_arguments, export_presence, read_presence_outputs,
+)
 from ..core.project import Project, ProjectError, create_project, open_project
 from ..core.r_runtime import RRuntime
 from .analyses_page import AnalysesPage
@@ -43,6 +46,7 @@ class MainWindow(QMainWindow):
         self.logger = logging.getLogger("pichanalysis")
         self.logger.setLevel(logging.INFO)
         self.mapping_worker: MappingWorker | None = None
+        self.presence_worker: MappingWorker | None = None
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.analyses_page = AnalysesPage()
@@ -71,6 +75,12 @@ class MainWindow(QMainWindow):
         self.analyses_page.export_table_requested.connect(lambda: self._export_mapping("protein_catalog.csv"))
         self.analyses_page.export_workbook_requested.connect(lambda: self._export_mapping("protein_mapping.xlsx"))
         self.analyses_page.open_results_requested.connect(self._open_results)
+        presence = self.analyses_page.presence_page
+        presence.run_requested.connect(self._run_presence)
+        presence.export_table_requested.connect(lambda: self._export_presence("tables/classification.csv"))
+        presence.export_workbook_requested.connect(lambda: self._export_presence("tables/presence_absence.xlsx"))
+        presence.export_graph_requested.connect(self._export_presence_graph)
+        presence.open_graphs_requested.connect(self._open_presence_graphs)
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -81,7 +91,8 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self.mapping_worker and self.mapping_worker.isRunning():
+        if ((self.mapping_worker and self.mapping_worker.isRunning()) or
+                (self.presence_worker and self.presence_worker.isRunning())):
             QMessageBox.information(
                 self, "Análise em execução",
                 "Aguarde o término do mapeamento antes de fechar o PichAnalysis.",
@@ -113,6 +124,11 @@ class MainWindow(QMainWindow):
                 self.analyses_page.show_outputs(read_mapping_outputs(project))
         except RuntimeError:
             self.logger.exception("Não foi possível restaurar resultados de mapeamento")
+        try:
+            if (project.root / "analyses" / "presence_absence" / "latest_metadata.json").is_file():
+                self.analyses_page.presence_page.show_outputs(read_presence_outputs(project))
+        except RuntimeError:
+            self.logger.exception("Não foi possível restaurar presença/ausência")
 
     def _restore_data(self) -> None:
         if not self.project:
@@ -279,6 +295,54 @@ class MainWindow(QMainWindow):
     def _open_results(self) -> None:
         if self.project:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root / "mapping" / "tables")))
+
+    def _run_presence(self, parameters: dict) -> None:
+        if not self.project or self.presence_worker:
+            return
+        run_id = new_run_id()
+        try:
+            arguments = build_presence_arguments(self.project, run_id=run_id, **parameters)
+        except ValueError as error:
+            QMessageBox.warning(self, "Presença / ausência", str(error)); return
+        self.logger.info("Presença/ausência iniciada run_id=%s tipo=%s condições=%s threshold=%s zero_ausência=%s",
+            run_id, parameters["quantification_type"], len(parameters["selected_conditions"]),
+            parameters["threshold"], parameters["zero_is_missing"])
+        worker = MappingWorker(self.runtime, APPLICATION_ROOT / "r_scripts" / "02_presence_absence.R", arguments)
+        self.presence_worker = worker; self.analyses_page.presence_page.set_running(True)
+        worker.succeeded.connect(lambda stdout,stderr:self._presence_finished(run_id,stdout,stderr))
+        worker.failed.connect(lambda message,stderr:self._presence_failed(run_id,message,stderr))
+        worker.finished.connect(worker.deleteLater); worker.start()
+
+    def _presence_finished(self, run_id: str, stdout: str, stderr: str) -> None:
+        self.presence_worker=None; self.analyses_page.presence_page.set_running(False)
+        try:
+            outputs=read_presence_outputs(self.project); self.analyses_page.presence_page.show_outputs(outputs)
+            self.scripts_page.set_project_scripts(self.project.root / "scripts" / "runs")
+            self.logger.info("Presença/ausência finalizada run_id=%s entidades=%s exit_code=0",run_id,outputs.metadata.get("total_entities"))
+        except RuntimeError as error: QMessageBox.warning(self,"Resultados",str(error))
+
+    def _presence_failed(self, run_id: str, message: str, stderr: str) -> None:
+        self.presence_worker=None; self.analyses_page.presence_page.set_running(False)
+        self.logger.error("Presença/ausência falhou run_id=%s: %s",run_id,message)
+        self.scripts_page.result_view.setPlainText(stderr); QMessageBox.warning(self,"Falha na análise",message)
+
+    def _export_presence(self, relative: str) -> None:
+        if not self.project:return
+        source=self.project.root/"analyses"/"presence_absence"/relative
+        destination,_=QFileDialog.getSaveFileName(self,"Exportar resultado",source.name)
+        if destination:
+            try: export_presence(source,Path(destination))
+            except OSError as error: QMessageBox.warning(self,"Exportação",str(error))
+
+    def _export_presence_graph(self, source: str) -> None:
+        if not source:return
+        destination,_=QFileDialog.getSaveFileName(self,"Exportar gráfico",Path(source).name)
+        if destination:
+            try: export_presence(Path(source),Path(destination))
+            except OSError as error: QMessageBox.warning(self,"Exportação",str(error))
+
+    def _open_presence_graphs(self) -> None:
+        if self.project: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root/"analyses"/"presence_absence"/"graphs")))
 
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"
