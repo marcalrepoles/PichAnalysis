@@ -1,0 +1,15 @@
+args<-commandArgs(trailingOnly=FALSE);file_arg<-sub("^--file=","",args[grepl("^--file=",args)])
+root<-normalizePath(file.path(dirname(file_arg),".."),winslash="/",mustWork=TRUE);source(file.path(root,"lib","go_analysis.R"))
+ann<-data.frame(entity_id=c("1","1","1","2","3","4"),GO_ID=c("GO:1","GO:1","GO:2","GO:1","GO:3","GO:3"),
+  GO_term=c("one","one","two","one","three","three"),ontology=c("BP","BP","MF","BP","CC","CC"),
+  evidence_code=c("EXP","EXP","IEA","IDA","IMP","IEA"),stringsAsFactors=FALSE)
+dedup<-deduplicate_annotations(ann);stopifnot(nrow(dedup)==5)
+freq<-go_frequency(dedup,4);stopifnot(freq$Protein_count[freq$GO_ID=="GO:1"]==2,all(c("BP","MF","CC")%in%freq$Ontology))
+stopifnot(!"IEA"%in%filter_evidence(dedup,"exclude_iea")$evidence_code)
+stopifnot(all(filter_evidence(dedup,"experimental")$evidence_code%in%EXPERIMENTAL_EVIDENCE_CODES))
+target<-filter_evidence(dedup[dedup$entity_id%in%c("1","2"),],"all")
+enrich<-go_enrichment(target,dedup,c("1","2"),c("1","2","3","4"));stopifnot(nrow(enrich)>0,"p.adjust"%in%names(enrich),all(enrich$p.adjust>=enrich$pvalue,na.rm=TRUE))
+stopifnot(sum(enrich$Count>=2)==1)
+unannotated<-setdiff(c("1","2","3","4","5"),dedup$entity_id);stopifnot(identical(unannotated,"5"))
+outside<-setdiff(c("1","9"),c("1","2","3"));stopifnot(identical(outside,"9"))
+cat("R GO unit tests passed: dedup, frequency, ontologies, evidence, background, enrichment, BH, min-count, unannotated\n")

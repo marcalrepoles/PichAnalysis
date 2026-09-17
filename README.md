@@ -119,5 +119,24 @@ an UpSet-style intersection plot, a bounded binary heatmap, and—for two
 conditions—a detection-fraction scatter plot. This module does not perform
 differential statistical testing.
 
-This release deliberately does not provide identifier mapping, statistics, GO,
-KEGG, STRING, differential analysis, or other biological analyses.
+## Gene Ontology
+
+The GO module keeps individual protein-to-GO annotation, descriptive term
+frequency, and statistical enrichment as separate products. Frequency answers
+how often a term occurs; enrichment compares the target with an explicit
+experimental background using a hypergeometric test. The default background is
+mapped proteins from the experiment, never the whole genome implicitly.
+
+BP, MF, and CC are processed separately. Direct OrgDb annotations retain
+evidence codes and may include all evidence, exclude IEA, or retain only a
+centralized set of experimental codes. Enrichment reports raw p-values,
+Benjamini-Hochberg FDR, GeneRatio, BgRatio, counts, and associated genes.
+Optional Jaccard redundancy simplification never replaces complete results.
+
+Local support uses `AnnotationDbi`, `GO.db`, `org.Hs.eg.db`, and `org.Mm.eg.db`
+for human and mouse. Runs record R, GO.db, and OrgDb versions and preserve long
+annotations, unannotated proteins, per-ontology tables, workbook, plots,
+metadata, and immutable script snapshots under `analyses/GO/`.
+
+This release deliberately does not provide KEGG, Reactome, MitoCarta, STRING,
+differential analysis, or other later biological modules.

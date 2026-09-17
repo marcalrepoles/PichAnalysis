@@ -21,6 +21,7 @@ from ..core.mapping_analysis import (
     build_mapping_arguments, cache_path, export_result, new_run_id, read_mapping_outputs,
 )
 from ..core.organism import get_organism, has_biological_results, set_organism
+from ..core.go_analysis import export_go, prepare_go_arguments, read_go_outputs
 from ..core.presence_analysis import (
     build_presence_arguments, export_presence, read_presence_outputs,
 )
@@ -47,6 +48,7 @@ class MainWindow(QMainWindow):
         self.logger.setLevel(logging.INFO)
         self.mapping_worker: MappingWorker | None = None
         self.presence_worker: MappingWorker | None = None
+        self.go_worker: MappingWorker | None = None
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.analyses_page = AnalysesPage()
@@ -81,6 +83,12 @@ class MainWindow(QMainWindow):
         presence.export_workbook_requested.connect(lambda: self._export_presence("tables/presence_absence.xlsx"))
         presence.export_graph_requested.connect(self._export_presence_graph)
         presence.open_graphs_requested.connect(self._open_presence_graphs)
+        go = self.analyses_page.go_page
+        go.run_requested.connect(self._run_go)
+        go.export_table_requested.connect(self._export_go_path)
+        go.export_workbook_requested.connect(lambda:self._export_go_path(str(self.project.root/"analyses"/"GO"/"GO_analysis.xlsx") if self.project else ""))
+        go.export_graph_requested.connect(self._export_go_path)
+        go.open_folder_requested.connect(self._open_go)
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -92,7 +100,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if ((self.mapping_worker and self.mapping_worker.isRunning()) or
-                (self.presence_worker and self.presence_worker.isRunning())):
+                (self.presence_worker and self.presence_worker.isRunning()) or
+                (self.go_worker and self.go_worker.isRunning())):
             QMessageBox.information(
                 self, "Análise em execução",
                 "Aguarde o término do mapeamento antes de fechar o PichAnalysis.",
@@ -129,6 +138,9 @@ class MainWindow(QMainWindow):
                 self.analyses_page.presence_page.show_outputs(read_presence_outputs(project))
         except RuntimeError:
             self.logger.exception("Não foi possível restaurar presença/ausência")
+        try:
+            if (project.root/"analyses"/"GO"/"latest_metadata.json").is_file(): self.analyses_page.go_page.show_outputs(read_go_outputs(project))
+        except RuntimeError: self.logger.exception("Não foi possível restaurar GO")
 
     def _restore_data(self) -> None:
         if not self.project:
@@ -343,6 +355,41 @@ class MainWindow(QMainWindow):
 
     def _open_presence_graphs(self) -> None:
         if self.project: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root/"analyses"/"presence_absence"/"graphs")))
+
+    def _run_go(self, parameters: dict) -> None:
+        if not self.project or self.go_worker:return
+        run_id=new_run_id()
+        try: arguments=prepare_go_arguments(self.project,run_id=run_id,**parameters)
+        except ValueError as error:
+            if "não pertencem ao background" in str(error):
+                answer=QMessageBox.question(self,"Target fora do background",str(error)+"\nAjustar o target ao background e continuar?")
+                if answer!=QMessageBox.StandardButton.Yes:return
+                try:arguments=prepare_go_arguments(self.project,run_id=run_id,allow_target_outside_background=True,**parameters)
+                except ValueError as second:QMessageBox.warning(self,"Gene Ontology",str(second));return
+            else:QMessageBox.warning(self,"Gene Ontology",str(error));return
+        self.logger.info("GO iniciado run_id=%s target=%s background=%s ontologias=%s",run_id,parameters["target_selection"],parameters["background_selection"],",".join(parameters["ontologies"]))
+        worker=MappingWorker(self.runtime,APPLICATION_ROOT/"r_scripts"/"03_go_analysis.R",arguments);self.go_worker=worker;self.analyses_page.go_page.set_running(True)
+        worker.succeeded.connect(lambda stdout,stderr:self._go_finished(run_id,stdout,stderr));worker.failed.connect(lambda message,stderr:self._go_failed(run_id,message,stderr));worker.finished.connect(worker.deleteLater);worker.start()
+
+    def _go_finished(self,run_id:str,stdout:str,stderr:str)->None:
+        self.go_worker=None;self.analyses_page.go_page.set_running(False)
+        try:
+            outputs=read_go_outputs(self.project);self.analyses_page.go_page.show_outputs(outputs);self.scripts_page.set_project_scripts(self.project.root/"scripts"/"runs")
+            self.logger.info("GO finalizado run_id=%s anotadas=%s não_anotadas=%s exit_code=0",run_id,outputs.metadata.get("annotated_count"),outputs.metadata.get("unannotated_count"))
+        except RuntimeError as error:QMessageBox.warning(self,"Resultados GO",str(error))
+
+    def _go_failed(self,run_id:str,message:str,stderr:str)->None:
+        self.go_worker=None;self.analyses_page.go_page.set_running(False);self.logger.error("GO falhou run_id=%s: %s",run_id,message);self.scripts_page.result_view.setPlainText(stderr);QMessageBox.warning(self,"Falha GO",message)
+
+    def _export_go_path(self,source:str)->None:
+        if not source:return
+        destination,_=QFileDialog.getSaveFileName(self,"Exportar resultado GO",Path(source).name)
+        if destination:
+            try:export_go(Path(source),Path(destination))
+            except OSError as error:QMessageBox.warning(self,"Exportação",str(error))
+
+    def _open_go(self)->None:
+        if self.project:QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root/"analyses"/"GO")))
 
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"

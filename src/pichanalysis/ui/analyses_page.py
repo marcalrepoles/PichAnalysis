@@ -14,6 +14,7 @@ from ..core.mapping_analysis import MappingOutputs, mapping_readiness
 from ..core.organism import COMMON_ORGANISMS, get_organism
 from ..core.project import Project
 from .presence_page import PresencePage
+from .go_page import GOPage
 
 
 class AnalysesPage(QWidget):
@@ -90,9 +91,11 @@ class AnalysesPage(QWidget):
         self.preview.currentCellChanged.connect(self._show_detail)
         self._organism_mode()
         self.presence_page = PresencePage()
+        self.go_page = GOPage()
         module_tabs = QTabWidget()
         module_tabs.addTab(mapping_page, "Identificação e anotação")
         module_tabs.addTab(self.presence_page, "Presença / ausência")
+        module_tabs.addTab(self.go_page, "Gene Ontology")
         outer_layout = QVBoxLayout(self)
         outer_layout.addWidget(module_tabs)
 
@@ -111,6 +114,7 @@ class AnalysesPage(QWidget):
     def set_project(self, project: Project | None) -> None:
         self.project = project
         self.presence_page.set_project(project)
+        self.go_page.set_project(project)
         if project is None:
             self.run_button.setEnabled(False)
             return
