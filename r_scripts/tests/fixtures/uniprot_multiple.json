@@ -1,0 +1,1 @@
+{"results":[{"from":"X","to":{"primaryAccession":"A1","uniProtkbId":"A1_HUMAN","entryType":"UniProtKB reviewed (Swiss-Prot)","organism":{"scientificName":"Homo sapiens","taxonId":9606}}},{"from":"X","to":{"primaryAccession":"A2","uniProtkbId":"A2_MOUSE","entryType":"UniProtKB unreviewed (TrEMBL)","organism":{"scientificName":"Mus musculus","taxonId":10090}}}]}

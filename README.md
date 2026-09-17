@@ -56,5 +56,44 @@ Identifier detection is local and deterministic. It is based on column names and
 patterns found in a bounded sample of values; it is **not validation against
 UniProt, NCBI, Ensembl, HGNC, or any other external biological database**.
 
+## Biological mapping and annotation
+
+The project organism must be configured before mapping. Homo sapiens (9606), Mus
+musculus (10090), and custom scientific-name/taxonomy-ID pairs are supported.
+The configured primary identifier is mapped by R through the official UniProt ID
+Mapping REST workflow. UniProt candidates are preserved for unique, ambiguous,
+and unmapped inputs, checked against the selected organism, and supplemented with
+NCBI Gene annotations through the current Datasets v2 `dataset_report` endpoints.
+UniProt and NCBI fields remain separate; no generated or integrated summary is
+created.
+
+Local identifier suggestions from the import screen are pattern-based hints.
+Online mapping is the distinct validation/annotation step and still requires the
+user to review ambiguous results.
+
+### R dependencies
+
+R must provide `httr2`, `jsonlite`, `readr`, `DBI`, `RSQLite`, and `openxlsx`.
+The application never installs packages automatically. `Rscript` is searched on
+PATH, in a configured location, standard versioned Windows installations, and
+common macOS locations.
+
+### Cache, provenance, and outputs
+
+A reusable SQLite cache is stored in the platform-appropriate user cache folder,
+outside the source repository. Selecting “Atualizar anotações online” bypasses
+existing entries and appends freshly retrieved data. Every project still receives
+an exact snapshot in `mapping/raw/<run_id>/`, plus scripts, parameters, and R
+session information under `scripts/runs/<run_id>_mapping_annotation/`.
+
+Automatic outputs in `mapping/tables/` are:
+
+- `id_mapping.csv`
+- `protein_catalog.csv`
+- `unmapped.csv`
+- `ambiguous.csv`
+- `protein_mapping.xlsx`, with separate Mapping, Protein catalog, Unmapped, and
+  Ambiguous worksheets
+
 This release deliberately does not provide identifier mapping, statistics, GO,
 KEGG, STRING, differential analysis, or other biological analyses.

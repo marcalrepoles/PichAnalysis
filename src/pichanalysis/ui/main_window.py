@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QFileDialog, QInputDialog, QListWidget, QMainWindow, QMessageBox,
     QStackedWidget, QHBoxLayout, QWidget,
@@ -17,10 +17,15 @@ from PySide6.QtWidgets import (
 
 from ..core.column_mapping import load_mapping, save_mapping, validate_mapping
 from ..core.importer import ImportError, ImportResult, import_into_project, xlsx_sheets
+from ..core.mapping_analysis import (
+    build_mapping_arguments, cache_path, export_result, new_run_id, read_mapping_outputs,
+)
+from ..core.organism import get_organism, has_biological_results, set_organism
 from ..core.project import Project, ProjectError, create_project, open_project
 from ..core.r_runtime import RRuntime
 from .analyses_page import AnalysesPage
 from .data_page import DataPage
+from .mapping_worker import MappingWorker
 from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
 
@@ -37,6 +42,7 @@ class MainWindow(QMainWindow):
         self.runtime = RRuntime()
         self.logger = logging.getLogger("pichanalysis")
         self.logger.setLevel(logging.INFO)
+        self.mapping_worker: MappingWorker | None = None
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.analyses_page = AnalysesPage()
@@ -60,6 +66,11 @@ class MainWindow(QMainWindow):
         self.data_page.import_button.clicked.connect(self._import_data)
         self.data_page.save_mapping_requested.connect(self._save_mapping)
         self.scripts_page.test_requested.connect(self._test_r)
+        self.analyses_page.organism_requested.connect(self._save_organism)
+        self.analyses_page.run_requested.connect(self._run_mapping)
+        self.analyses_page.export_table_requested.connect(lambda: self._export_mapping("protein_catalog.csv"))
+        self.analyses_page.export_workbook_requested.connect(lambda: self._export_mapping("protein_mapping.xlsx"))
+        self.analyses_page.open_results_requested.connect(self._open_results)
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -68,6 +79,16 @@ class MainWindow(QMainWindow):
             self.navigation.item(2).flags() | self.navigation.item(2).flags().ItemIsEnabled
             if enabled else self.navigation.item(2).flags() & ~self.navigation.item(2).flags().ItemIsEnabled
         )
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self.mapping_worker and self.mapping_worker.isRunning():
+            QMessageBox.information(
+                self, "Análise em execução",
+                "Aguarde o término do mapeamento antes de fechar o PichAnalysis.",
+            )
+            event.ignore()
+            return
+        event.accept()
 
     def _configure_log(self) -> None:
         for handler in tuple(self.logger.handlers):
@@ -85,6 +106,13 @@ class MainWindow(QMainWindow):
         self.project_page.show_project(project)
         self._set_project_enabled(True)
         self._restore_data()
+        self.analyses_page.set_project(project)
+        self.scripts_page.set_project_scripts(project.root / "scripts" / "runs")
+        try:
+            if (project.root / "mapping" / "latest_metadata.json").is_file():
+                self.analyses_page.show_outputs(read_mapping_outputs(project))
+        except RuntimeError:
+            self.logger.exception("Não foi possível restaurar resultados de mapeamento")
 
     def _restore_data(self) -> None:
         if not self.project:
@@ -175,9 +203,82 @@ class MainWindow(QMainWindow):
                 "Configuração de colunas salva: %s",
                 "válida" if validation.valid else "inválida",
             )
+            self.analyses_page.set_project(self.project)
         except ProjectError as error:
             self.logger.exception("Erro ao salvar configuração de colunas")
             QMessageBox.warning(self, "Configuração", str(error))
+
+    def _save_organism(self, name: str, tax_id: str) -> None:
+        if not self.project:
+            return
+        current = get_organism(self.project)
+        changing = current and (current.name != name.strip() or current.tax_id != tax_id.strip())
+        if changing and has_biological_results(self.project):
+            answer = QMessageBox.question(self, "Alterar organismo",
+                "Já existem resultados biológicos. Alterar o organismo invalida esses resultados. Deseja continuar?")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        try:
+            set_organism(self.project, name, tax_id)
+            self.logger.info("Organismo configurado: %s (%s)", name.strip(), tax_id.strip())
+            self.analyses_page.set_project(self.project)
+        except (ValueError, ProjectError) as error:
+            QMessageBox.warning(self, "Organismo", str(error))
+
+    def _run_mapping(self, refresh: bool) -> None:
+        if not self.project or self.mapping_worker:
+            return
+        run_id = new_run_id()
+        try:
+            arguments = build_mapping_arguments(self.project, cache_path(), refresh, run_id)
+        except ValueError as error:
+            QMessageBox.warning(self, "Mapeamento", str(error))
+            return
+        self.logger.info("Mapeamento iniciado run_id=%s organismo=%s tipo=%s cache=%s",
+            run_id, self.project.config.get("organism_tax_id"),
+            arguments[arguments.index("--id-type") + 1], not refresh)
+        worker = MappingWorker(self.runtime, APPLICATION_ROOT / "r_scripts" / "01_mapping_annotation.R", arguments)
+        self.mapping_worker = worker
+        self.analyses_page.set_running(True)
+        worker.succeeded.connect(lambda stdout, stderr: self._mapping_finished(run_id, stdout, stderr))
+        worker.failed.connect(lambda message, stderr: self._mapping_failed(run_id, message, stderr))
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _mapping_finished(self, run_id: str, stdout: str, stderr: str) -> None:
+        self.mapping_worker = None
+        self.analyses_page.set_running(False)
+        try:
+            outputs = read_mapping_outputs(self.project)
+            self.analyses_page.show_outputs(outputs)
+            self.scripts_page.set_project_scripts(self.project.root / "scripts" / "runs")
+            meta = outputs.metadata
+            self.logger.info("Mapeamento finalizado run_id=%s mapped=%s ambiguous=%s unmapped=%s exit_code=0",
+                run_id, meta.get("mapped_unique_count"), meta.get("ambiguous_count"), meta.get("unmapped_count"))
+        except RuntimeError as error:
+            QMessageBox.warning(self, "Resultados", str(error))
+
+    def _mapping_failed(self, run_id: str, message: str, stderr: str) -> None:
+        self.mapping_worker = None
+        self.analyses_page.set_running(False)
+        self.logger.error("Mapeamento falhou run_id=%s: %s", run_id, message)
+        self.scripts_page.result_view.setPlainText(stderr)
+        QMessageBox.warning(self, "Falha no mapeamento", message)
+
+    def _export_mapping(self, filename: str) -> None:
+        if not self.project:
+            return
+        source = self.project.root / "mapping" / "tables" / filename
+        destination, _ = QFileDialog.getSaveFileName(self, "Exportar resultado", filename)
+        if destination:
+            try:
+                export_result(source, Path(destination))
+            except OSError as error:
+                QMessageBox.warning(self, "Exportação", str(error))
+
+    def _open_results(self) -> None:
+        if self.project:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root / "mapping" / "tables")))
 
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"

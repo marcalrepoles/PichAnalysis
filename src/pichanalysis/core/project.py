@@ -107,6 +107,8 @@ def create_project(parent: Path, name: str) -> Project:
             "created_at": created_at,
             "updated_at": created_at,
             "project_root": ".",
+            "organism_name": None,
+            "organism_tax_id": None,
             "input": {
                 "original_file": None,
                 "processed_file": None,
