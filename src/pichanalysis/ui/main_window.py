@@ -7,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pandas as pd
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
@@ -14,7 +15,8 @@ from PySide6.QtWidgets import (
     QStackedWidget, QHBoxLayout, QWidget,
 )
 
-from ..core.importer import ImportError, import_into_project, read_table, xlsx_sheets
+from ..core.column_mapping import load_mapping, save_mapping, validate_mapping
+from ..core.importer import ImportError, ImportResult, import_into_project, xlsx_sheets
 from ..core.project import Project, ProjectError, create_project, open_project
 from ..core.r_runtime import RRuntime
 from .analyses_page import AnalysesPage
@@ -56,6 +58,7 @@ class MainWindow(QMainWindow):
         self.project_page.open_button.clicked.connect(self._open_project)
         self.project_page.folder_button.clicked.connect(self._open_folder)
         self.data_page.import_button.clicked.connect(self._import_data)
+        self.data_page.save_mapping_requested.connect(self._save_mapping)
         self.scripts_page.test_requested.connect(self._test_r)
         self._set_project_enabled(False)
 
@@ -81,6 +84,33 @@ class MainWindow(QMainWindow):
         self.logger.info(event)
         self.project_page.show_project(project)
         self._set_project_enabled(True)
+        self._restore_data()
+
+    def _restore_data(self) -> None:
+        if not self.project:
+            return
+        input_config = self.project.config.get("input", {})
+        processed_name = input_config.get("processed_file")
+        original_name = input_config.get("original_file")
+        if not processed_name or not original_name:
+            return
+        try:
+            processed = self.project.root / processed_name
+            original = self.project.root / original_name
+            frame = pd.read_csv(processed, encoding="utf-8")
+            result = ImportResult(
+                frame,
+                original,
+                processed,
+                str(input_config.get("format", "csv")),
+                input_config.get("sheet"),
+            )
+            mapping = load_mapping(self.project)
+            self.data_page.show_result(result, mapping)
+            if mapping:
+                self.data_page.show_validation(validate_mapping(mapping))
+        except Exception:
+            self.logger.exception("Não foi possível restaurar os dados processados")
 
     def _new_project(self) -> None:
         name, accepted = QInputDialog.getText(self, "Novo projeto", "Nome do projeto:")
@@ -127,13 +157,27 @@ class MainWindow(QMainWindow):
                     if not accepted:
                         return
             result = import_into_project(self.project, source, sheet)
-            self.data_page.show_result(result)
+            self.data_page.show_result(result, load_mapping(self.project))
             self.project_page.show_project(self.project)
             self.logger.info("Importação concluída: %s", result.original_path.name)
             self.navigation.setCurrentRow(1)
         except (ImportError, ProjectError) as error:
             self.logger.exception("Erro de importação")
             QMessageBox.warning(self, "Falha na importação", str(error))
+
+    def _save_mapping(self, columns: dict) -> None:
+        if not self.project:
+            return
+        try:
+            validation = save_mapping(self.project, columns)
+            self.data_page.show_validation(validation)
+            self.logger.info(
+                "Configuração de colunas salva: %s",
+                "válida" if validation.valid else "inválida",
+            )
+        except ProjectError as error:
+            self.logger.exception("Erro ao salvar configuração de colunas")
+            QMessageBox.warning(self, "Configuração", str(error))
 
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"
@@ -149,4 +193,3 @@ class MainWindow(QMainWindow):
         except (RuntimeError, OSError) as error:
             self.logger.exception("Teste do R falhou")
             QMessageBox.warning(self, "Teste do R", str(error))
-

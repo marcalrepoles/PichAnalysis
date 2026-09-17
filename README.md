@@ -1,9 +1,9 @@
 # PichAnalysis
 
 PichAnalysis is a cross-platform desktop foundation for reproducible proteomics
-projects. This first version creates and opens projects, imports tabular data,
-previews columns, and checks a local R installation. Scientific analyses are not
-implemented yet.
+projects. It creates and opens projects, imports tabular data, previews columns,
+helps interpret identifiers and quantitative columns, and checks a local R
+installation. Scientific analyses are not implemented yet.
 
 ## Architecture
 
@@ -45,6 +45,16 @@ scripts. Imported originals are copied without modification and internal data is
 stored as UTF-8 CSV. A project can be moved and reopened because its internal
 paths are relative to its root.
 
+## Column configuration
+
+After import, PichAnalysis suggests a role for each column, preliminary biological
+identifier types, and condition/replicate labels for clearly named quantitative
+columns. The user can correct every suggestion, choose one primary identifier,
+and save the experimental design in `project.json` without changing the table.
+
+Identifier detection is local and deterministic. It is based on column names and
+patterns found in a bounded sample of values; it is **not validation against
+UniProt, NCBI, Ensembl, HGNC, or any other external biological database**.
+
 This release deliberately does not provide identifier mapping, statistics, GO,
 KEGG, STRING, differential analysis, or other biological analyses.
-

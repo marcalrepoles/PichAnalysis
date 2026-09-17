@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .column_mapping import suggest_columns
 from .project import Project, ProjectError
 
 
@@ -118,6 +119,11 @@ def import_into_project(project: Project, source: Path, sheet: str | None = None
         "columns": int(len(dataframe.columns)),
         "column_metadata": result.column_metadata,
     }
+    project.config["columns"] = suggest_columns(dataframe)
+    project.config["column_configuration"] = {
+        "status": "suggested",
+        "errors": ["Revise e salve as sugestões de configuração."],
+        "warnings": [],
+    }
     project.save()
     return result
-

@@ -116,6 +116,12 @@ def create_project(parent: Path, name: str) -> Project:
                 "columns": None,
                 "column_metadata": [],
             },
+            "columns": {},
+            "column_configuration": {
+                "status": "not_configured",
+                "errors": ["Nenhum identificador principal selecionado."],
+                "warnings": [],
+            },
         },
     )
     project.save()
@@ -139,4 +145,3 @@ def open_project(root: Path) -> Project:
     if not all((root / directory).is_dir() for directory in PROJECT_DIRECTORIES):
         raise ProjectError("A estrutura de pastas do projeto está incompleta.")
     return Project(root=root, config=config)
-
