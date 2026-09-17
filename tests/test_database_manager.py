@@ -11,7 +11,7 @@ class FakeProvider:
     def fetch(self,route):
         self.calls.append(route)
         if route==self.fail:raise RuntimeError("planned failure")
-        return {"list/pathway/hsa":b"path:hsa00010\tGlycolysis\npath:hsa00020\tTCA cycle\n","list/hsa":b"hsa:1\tA1BG; description\n","link/pathway/hsa":b"hsa:1\tpath:hsa00010\n"}.get(route,KGML if route.endswith("/kgml") else PNG if route.endswith("/image") else b"ENTRY       hsa00010\n///\n")
+        return {"list/pathway/hsa":b"path:hsa00010\tGlycolysis\npath:hsa00020\tTCA cycle\n","list/hsa":b"hsa:1\tA1BG; description\n","link/pathway/hsa":b"hsa:1\tpath:hsa00010\n","conv/ncbi-geneid/hsa":b"hsa:1\tncbi-geneid:1\n","conv/uniprot/hsa":b"hsa:1\tup:P00001\n","info/kegg":b"kegg\tRelease test\n"}.get(route,KGML if route.endswith("/kgml") else PNG if route.endswith("/image") else b"ENTRY       hsa00010\n///\n")
 def test_parsers_and_validators():
     assert parse_pathways(b"path:hsa00010\tName\n")[0]["pathway_id"]=="hsa00010"
     assert parse_genes(b"hsa:1\tA1BG; description\n")[0]["symbol"]=="A1BG"
@@ -29,6 +29,15 @@ def test_download_creates_complete_atomic_snapshot(tmp_path):
     manager=DatabaseManager(tmp_path,FakeProvider());snapshot=manager.download(["entries","kgml","images"],pathway_subset=["hsa00010"])
     assert manager.manifest(snapshot)["status"]==DatabaseState.READY and manager.active_snapshot()==snapshot
     assert (snapshot/"tables/gene_to_pathway.tsv").is_file() and not list(snapshot.rglob("*.part"))
+    assert manager.pathway_analysis_compatibility()==(True,"Ready for pathway analysis")
+    for name in ("ncbi_geneid_to_kegg.tsv","kegg_to_ncbi_geneid.tsv","uniprot_to_kegg.tsv","kegg_to_uniprot.tsv"):assert (snapshot/"tables"/name).is_file()
+
+def test_old_snapshot_is_not_modified_and_is_incompatible(tmp_path):
+    manager=DatabaseManager(tmp_path,FakeProvider());snap=manager.download([],pathway_subset=[])
+    for name in ("ncbi_geneid_to_kegg.tsv","kegg_to_ncbi_geneid.tsv","uniprot_to_kegg.tsv","kegg_to_uniprot.tsv"):(snap/"tables"/name).unlink()
+    before={p.name:p.read_bytes() for p in snap.rglob("*") if p.is_file()}
+    assert manager.pathway_analysis_compatibility()==(False,"Missing identifier mapping tables")
+    assert before=={p.name:p.read_bytes() for p in snap.rglob("*") if p.is_file()}
 def test_resume_skips_valid_completed_files(tmp_path):
     provider=FakeProvider("get/hsa00010/kgml");manager=DatabaseManager(tmp_path,provider);first=manager.download(["entries","kgml"],pathway_subset=["hsa00010"])
     assert manager.manifest(first)["status"]==DatabaseState.INCOMPLETE

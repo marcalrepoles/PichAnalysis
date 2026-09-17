@@ -116,6 +116,17 @@ def parse_gene_pathway_links(data: bytes) -> list[tuple[str, str]]:
         raise ValueError("The KEGG gene-to-pathway table is empty.")
     return rows
 
+def parse_conversion(data: bytes, external_prefix: str) -> list[tuple[str, str]]:
+    rows=[]
+    for line in decode_text(data).splitlines():
+        if not line.strip(): continue
+        left,right=line.split("\t",1)
+        if left.startswith("hsa:"): kegg,external=left,right
+        else: external,kegg=left,right
+        rows.append((external.removeprefix(external_prefix),kegg.removeprefix("hsa:")))
+    if not rows: raise ValueError("The KEGG identifier conversion table is empty.")
+    return rows
+
 
 def validate_text(data: bytes) -> None:
     if not data.strip() or b"\t" not in data:
@@ -141,4 +152,3 @@ VALIDATORS: dict[str, Callable[[bytes], None]] = {
     "kgml": validate_kgml,
     "images": validate_png,
 }
-

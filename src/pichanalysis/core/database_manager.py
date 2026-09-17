@@ -15,8 +15,10 @@ from platformdirs import user_data_path
 from .database_registry import DatabaseState, KEGG_HSA
 from .databases.kegg import (
     KEGGProvider, parse_gene_pathway_links, parse_genes, parse_pathways,
-    validate_text, VALIDATORS,
+    validate_text, VALIDATORS, parse_conversion,
 )
+
+PATHWAY_ANALYSIS_TABLES=("ncbi_geneid_to_kegg.tsv","kegg_to_ncbi_geneid.tsv","uniprot_to_kegg.tsv","kegg_to_uniprot.tsv")
 
 
 ProgressCallback = Callable[[dict], None]
@@ -96,6 +98,14 @@ class DatabaseManager:
             "images": snapshot / "images" if snapshot else None,
         }
 
+    def pathway_analysis_compatibility(self) -> tuple[bool,str]:
+        snapshot=self.active_snapshot()
+        if snapshot is None:return False,"No active snapshot"
+        if self.manifest(snapshot).get("status")!=DatabaseState.READY:return False,"Incomplete database"
+        if not all((snapshot/"tables"/name).is_file() for name in PATHWAY_ANALYSIS_TABLES):
+            return False,"Missing identifier mapping tables"
+        return True,"Ready for pathway analysis"
+
     def download(self, components: Iterable[str], progress: ProgressCallback | None = None,
                  *, resume: bool = False, pathway_subset: Iterable[str] | None = None) -> Path:
         selected = tuple(dict.fromkeys(("core", *components)))
@@ -114,7 +124,7 @@ class DatabaseManager:
         if resume and existing_manifest:
             selected = tuple(existing_manifest.get("components", selected))
         manifest = existing_manifest or {
-            "schema_version": 1, "database_id": "kegg", "display_name": KEGG_HSA.display_name,
+            "schema_version": 1, "database_schema_version": 2, "database_id": "kegg", "display_name": KEGG_HSA.display_name,
             "organism": {"name": KEGG_HSA.organism_name, "code": "hsa", "taxonomy_id": "9606"},
             "snapshot_id": snapshot_id, "created_at": datetime.now(timezone.utc).isoformat(),
             "source_base_url": self.provider.base_url, "components": list(selected),
@@ -128,8 +138,8 @@ class DatabaseManager:
             pathways, genes, links = self._download_core(snapshot, manifest, progress)
             wanted = list(pathway_subset) if pathway_subset is not None else [row["pathway_id"] for row in pathways]
             jobs = [(component, pathway_id) for component in selected if component != "core" for pathway_id in wanted]
-            total = 3 + len(jobs)
-            done = 3
+            total = 5 + len(jobs)
+            done = 5
             for component, pathway_id in jobs:
                 if self._cancel.is_set():
                     manifest["status"] = DatabaseState.CANCELLED
@@ -172,6 +182,8 @@ class DatabaseManager:
             ("core:pathways", "list/pathway/hsa", "metadata/pathways.raw.tsv", parse_pathways),
             ("core:genes", "list/hsa", "metadata/genes.raw.tsv", parse_genes),
             ("core:links", "link/pathway/hsa", "metadata/gene_to_pathway.raw.tsv", parse_gene_pathway_links),
+            ("core:ncbi", "conv/ncbi-geneid/hsa", "metadata/ncbi_geneid.raw.tsv", lambda x:parse_conversion(x,"ncbi-geneid:")),
+            ("core:uniprot", "conv/uniprot/hsa", "metadata/uniprot.raw.tsv", lambda x:parse_conversion(x,"up:")),
         )
         parsed = []
         for index, (key, route, relative, parser) in enumerate(definitions, 1):
@@ -186,18 +198,24 @@ class DatabaseManager:
             data = raw_path.read_bytes()
             parsed.append(parser(data))
             self._write_manifest(snapshot, manifest)
-            self._emit(progress, manifest, index, 3, f"Downloaded core table {index} of 3")
+            self._emit(progress, manifest, index, 5, f"Downloaded core table {index} of 5")
             if self._cancel.is_set():
                 manifest["status"] = DatabaseState.CANCELLED
                 self._write_manifest(snapshot, manifest)
-                return (*parsed, *([] for _ in range(3 - len(parsed))))
-        pathways, genes, links = parsed
+                return (*parsed, *([] for _ in range(5 - len(parsed))))[:3]
+        pathways, genes, links, ncbi, uniprot = parsed
         self._write_tsv(snapshot / "tables/pathways.tsv", pathways, ("pathway_id", "name", "organism_code"))
         self._write_tsv(snapshot / "tables/genes.tsv", genes, ("gene_id", "kegg_gene_id", "symbol", "raw_description"))
         forward = [{"gene_id": gene, "pathway_id": pathway} for gene, pathway in links]
         inverse = [{"pathway_id": pathway, "gene_id": gene} for gene, pathway in links]
         self._write_tsv(snapshot / "tables/gene_to_pathway.tsv", forward, ("gene_id", "pathway_id"))
         self._write_tsv(snapshot / "tables/pathway_to_gene.tsv", inverse, ("pathway_id", "gene_id"))
+        self._write_tsv(snapshot/"tables/ncbi_geneid_to_kegg.tsv",[{"ncbi_gene_id":x,"kegg_gene_id":k} for x,k in ncbi],("ncbi_gene_id","kegg_gene_id"))
+        self._write_tsv(snapshot/"tables/kegg_to_ncbi_geneid.tsv",[{"kegg_gene_id":k,"ncbi_gene_id":x} for x,k in ncbi],("kegg_gene_id","ncbi_gene_id"))
+        self._write_tsv(snapshot/"tables/uniprot_to_kegg.tsv",[{"uniprot_accession":x,"kegg_gene_id":k} for x,k in uniprot],("uniprot_accession","kegg_gene_id"))
+        self._write_tsv(snapshot/"tables/kegg_to_uniprot.tsv",[{"kegg_gene_id":k,"uniprot_accession":x} for x,k in uniprot],("kegg_gene_id","uniprot_accession"))
+        try:self._atomic_bytes(snapshot/"metadata/kegg_info.txt",self.provider.fetch("info/kegg"))
+        except Exception as error:self.logger.warning("Could not download KEGG release information: %s",error)
         return pathways, genes, links
 
     @staticmethod

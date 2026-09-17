@@ -22,6 +22,7 @@ from ..core.mapping_analysis import (
 )
 from ..core.organism import get_organism, has_biological_results, set_organism
 from ..core.go_analysis import export_go, prepare_go_arguments, read_go_outputs
+from ..core.kegg_analysis import prepare_kegg_arguments,read_kegg_outputs
 from ..core.presence_analysis import (
     build_presence_arguments, export_presence, read_presence_outputs,
 )
@@ -50,10 +51,11 @@ class MainWindow(QMainWindow):
         self.mapping_worker: MappingWorker | None = None
         self.presence_worker: MappingWorker | None = None
         self.go_worker: MappingWorker | None = None
+        self.kegg_worker: MappingWorker | None = None
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
-        self.analyses_page = AnalysesPage()
+        self.analyses_page = AnalysesPage(self.database_manager_page.manager)
         self.scripts_page = ScriptsPage(APPLICATION_ROOT / "r_scripts", self.runtime)
         self.navigation = QListWidget()
         self.navigation.addItems(["Project", "Data", "Analyses", "Database Manager", "Scripts / Logs"])
@@ -91,6 +93,9 @@ class MainWindow(QMainWindow):
         go.export_workbook_requested.connect(lambda:self._export_go_path(str(self.project.root/"analyses"/"GO"/"GO_analysis.xlsx") if self.project else ""))
         go.export_graph_requested.connect(self._export_go_path)
         go.open_folder_requested.connect(self._open_go)
+        kegg=self.analyses_page.kegg_page
+        kegg.run_requested.connect(self._run_kegg)
+        kegg.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -103,7 +108,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         if ((self.mapping_worker and self.mapping_worker.isRunning()) or
                 (self.presence_worker and self.presence_worker.isRunning()) or
-                (self.go_worker and self.go_worker.isRunning()) or self.database_manager_page.is_running()):
+                (self.go_worker and self.go_worker.isRunning()) or (self.kegg_worker and self.kegg_worker.isRunning()) or self.database_manager_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
                 "Wait for the current analysis or database download before closing PichAnalysis.",
@@ -392,6 +397,28 @@ class MainWindow(QMainWindow):
 
     def _open_go(self)->None:
         if self.project:QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.project.root/"analyses"/"GO")))
+
+    def _run_kegg(self,parameters:dict,allow_target_outside_background:bool=False)->None:
+        if not self.project or self.kegg_worker:return
+        run_id=new_run_id()
+        try:arguments=prepare_kegg_arguments(self.project,self.database_manager_page.manager,run_id=run_id,allow_target_outside_background=allow_target_outside_background,**parameters)
+        except ValueError as error:QMessageBox.warning(self,"KEGG Pathways",str(error));return
+        worker=MappingWorker(self.runtime,APPLICATION_ROOT/"r_scripts"/"04_kegg_analysis.R",arguments);self.kegg_worker=worker;self.analyses_page.kegg_page.set_running(True)
+        worker.succeeded.connect(lambda stdout,stderr:self._kegg_finished(run_id));worker.failed.connect(lambda message,stderr:self._kegg_failed(message,stderr,parameters));worker.finished.connect(worker.deleteLater);worker.start()
+    def _kegg_finished(self,run_id:str)->None:
+        self.kegg_worker=None;self.analyses_page.kegg_page.set_running(False)
+        try:self.analyses_page.kegg_page.show_outputs(read_kegg_outputs(self.project));self.scripts_page.set_project_scripts(self.project.root/"scripts"/"runs")
+        except RuntimeError as error:QMessageBox.warning(self,"KEGG results",str(error))
+    def _kegg_failed(self,message:str,stderr:str,parameters:dict)->None:
+        self.kegg_worker=None;self.analyses_page.kegg_page.set_running(False);self.scripts_page.result_view.setPlainText(stderr)
+        import re
+        match=re.search(r"(\d+) target KEGG gene\(s\) are outside",message+stderr)
+        if match:
+            if self._confirm_target_adjustment(int(match.group(1))):self._run_kegg(parameters,True)
+        else:QMessageBox.warning(self,"KEGG analysis failed",message)
+    def _confirm_target_adjustment(self,count:int)->bool:
+        box=QMessageBox(self);box.setWindowTitle("Target genes outside background");box.setText(f"{count} target genes are not present in the selected background.\n\nPathway enrichment requires the target set to be contained within the background.\n\nContinue using only target genes present in the background?")
+        proceed=box.addButton("Continue",QMessageBox.ButtonRole.AcceptRole);box.addButton("Cancel",QMessageBox.ButtonRole.RejectRole);box.exec();return box.clickedButton()==proceed
 
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"

@@ -150,3 +150,13 @@ Data is stored in the operating system's per-user application-data directory, ou
 KEGG REST access is centrally limited to at most three calls per second with bounded retries. The application displays an academic-use notice before the first download. Review <https://www.kegg.jp/kegg/rest/> and <https://www.kegg.jp/kegg/legal.html>.
 
 For a small online smoke check, use a temporary root and call `DatabaseManager.download(..., pathway_subset=["hsa00010", "hsa00020"])`. Automated tests use fake responses and never write to the production database directory.
+
+## KEGG Pathways analysis
+
+KEGG Pathways requires an active, pathway-analysis-compatible Homo sapiens snapshot installed separately through Database Manager. KEGG data are not bundled with PichAnalysis. New snapshots include official local NCBI GeneID and UniProt conversion tables; historical snapshots remain untouched and may be structurally valid but incompatible with this analysis.
+
+The analysis runs entirely offline in R. Stable NCBI Gene IDs are mapped first, followed by UniProt accessions. Users can exclude ambiguous mappings (the default) or include every mapped candidate for explicitly exploratory set analysis. Statistical units are deduplicated KEGG genes, while all originating experimental entities remain traceable.
+
+Pathway frequency is descriptive and reports how many selected genes occur in each pathway. Pathway enrichment is a separate hypergeometric analysis against an explicit experimental background, with Benjamini-Hochberg FDR correction. The default background is the KEGG-mapped portion of the experiment, not the complete human genome.
+
+The local Pathway Viewer can display installed PNG maps. KGML is required for highlighting target genes because the R analysis uses KGML membership and coordinates to identify hit nodes; Python only renders those calculated coordinates. Missing images or KGML do not prevent frequency and enrichment analysis.

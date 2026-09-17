@@ -1,0 +1,17 @@
+split_ids<-function(x){unique(trimws(unlist(strsplit(ifelse(is.na(x),"",as.character(x)),"[;,]"))))}
+map_catalog_kegg<-function(catalog,ncbi_map,uniprot_map,policy="unique-only"){
+ rows<-list()
+ for(i in seq_len(nrow(catalog))){r<-catalog[i,,drop=FALSE];n<-split_ids(r$ncbi_gene_id);u<-split_ids(r$uniprot_accession)
+  nk<-unique(ncbi_map$kegg_gene_id[ncbi_map$ncbi_gene_id%in%n]);uk<-unique(uniprot_map$kegg_gene_id[uniprot_map$uniprot_accession%in%u]);candidates<-unique(c(nk,uk));candidates<-candidates[nzchar(candidates)]
+  source<-if(length(nk))"NCBI GeneID"else if(length(uk))"UniProt"else "none";status<-if(!length(candidates))"unmapped"else if(length(candidates)==1)"unambiguous"else "ambiguous"
+  included<-status=="unambiguous"||(status=="ambiguous"&&policy=="all-candidates")
+  values<-if(length(candidates))candidates else NA_character_
+  for(k in values)rows[[length(rows)+1]]<-data.frame(source_row=r$source_row,original_id=r$original_id,uniprot_accession=r$uniprot_accession,gene_symbol=r$gene_symbol,ncbi_gene_id=r$ncbi_gene_id,kegg_gene_id=k,mapping_source=source,mapping_status=status,candidate_count=length(candidates),included_in_analysis=included,exclusion_reason=if(included)""else if(status=="unmapped")"No stable identifier mapped to KEGG"else"Ambiguous mapping excluded by policy",stringsAsFactors=FALSE)
+ }
+ do.call(rbind,rows)
+}
+kegg_frequency<-function(target_genes,links,pathways){pairs<-unique(links[links$gene_id%in%target_genes,,drop=FALSE]);counts<-aggregate(gene_id~pathway_id,pairs,function(x)length(unique(x)));names(counts)[2]<-"gene_count";counts$gene_fraction<-counts$gene_count/length(unique(target_genes));counts$genes<-vapply(counts$pathway_id,function(p)paste(sort(unique(pairs$gene_id[pairs$pathway_id==p])),collapse=";"),character(1));merge(counts,pathways,by="pathway_id",all.x=TRUE)[order(-counts$gene_count),]
+}
+kegg_enrichment<-function(target_genes,background_genes,links,pathways){target_genes<-intersect(unique(target_genes),unique(background_genes));background_genes<-unique(background_genes);rows<-lapply(unique(links$pathway_id),function(pid){members<-unique(links$gene_id[links$pathway_id==pid]);hits<-intersect(target_genes,members);k<-length(hits);K<-length(intersect(background_genes,members));n<-length(target_genes);N<-length(background_genes);data.frame(pathway_id=pid,target_gene_count=k,target_gene_total=n,background_gene_count=K,background_gene_total=N,GeneRatio=paste0(k,"/",n),BgRatio=paste0(K,"/",N),p_value=if(N&&n&&K)phyper(k-1,K,N-K,n,lower.tail=FALSE)else NA,genes=paste(sort(hits),collapse=";"))});out<-do.call(rbind,rows);out$p_adjust<-p.adjust(out$p_value,"BH");merge(out,pathways,by="pathway_id",all.x=TRUE)[order(out$p_adjust,out$p_value),]
+}
+kgml_nodes<-function(path,targets,pathway_id){if(!file.exists(path)||!requireNamespace("xml2",quietly=TRUE))return(data.frame());doc<-xml2::read_xml(path);entries<-xml2::xml_find_all(doc,".//entry[@type='gene']");rows<-list();for(e in entries){genes<-unlist(strsplit(xml2::xml_attr(e,"name"),"\\s+"));genes<-sub("^hsa:","",genes);g<-xml2::xml_find_first(e,"./graphics");if(inherits(g,"xml_missing"))next;for(gene in genes)rows[[length(rows)+1]]<-data.frame(pathway_id=pathway_id,entry_id=xml2::xml_attr(e,"id"),kegg_gene_id=gene,gene_symbol="",x=as.numeric(xml2::xml_attr(g,"x")),y=as.numeric(xml2::xml_attr(g,"y")),width=as.numeric(xml2::xml_attr(g,"width")),height=as.numeric(xml2::xml_attr(g,"height")),graphics_label=xml2::xml_attr(g,"name"),is_target_hit=gene%in%targets)};if(length(rows))do.call(rbind,rows)else data.frame()}
