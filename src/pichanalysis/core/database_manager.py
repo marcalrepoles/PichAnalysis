@@ -17,6 +17,7 @@ from .databases.kegg import (
     KEGGProvider, parse_gene_pathway_links, parse_genes, parse_pathways,
     validate_text, VALIDATORS, parse_conversion,
 )
+from .reactome_database import ReactomeDatabase
 
 PATHWAY_ANALYSIS_TABLES=("ncbi_geneid_to_kegg.tsv","kegg_to_ncbi_geneid.tsv","uniprot_to_kegg.tsv","kegg_to_uniprot.tsv")
 
@@ -34,6 +35,7 @@ class DatabaseManager:
         self.database_root = self.root / "kegg" / "hsa"
         self.snapshots_root = self.database_root / "snapshots"
         self.provider = provider or KEGGProvider()
+        self.reactome = ReactomeDatabase(self.root)
         self._cancel = threading.Event()
         self.logger = logging.getLogger("pichanalysis.database_manager")
         if not self.logger.handlers:
