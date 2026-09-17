@@ -41,7 +41,8 @@ catalog <- data.frame(
   source_row=1:7, original_id=c("row1", "row2", "U1;U2", "unknown", "group U1 U2", "row6", "row7"),
   uniprot_accession=c("U1", "", "U1;U2", "", "U1 U2", "U3", ""),
   ncbi_gene_id=c("N1", "N1", "", "BAD", "", "", "N2"),
-  gene_symbol=paste0("G", 1:7), protein_name=paste("Protein", 1:7), stringsAsFactors=FALSE)
+  gene_symbol=paste0("G", 1:7), protein_name=paste("Protein", 1:7),
+  uniprot_function=paste("Function", 1:7), ncbi_summary=paste("Summary", 1:7), stringsAsFactors=FALSE)
 mapping <- canonical_mapping(catalog, up, ncbi)
 row1 <- mapping[mapping$source_row == 1, ]
 check(nrow(row1) == 1 && row1$mapping_route == "UniProt", "5 UniProt precedence")
@@ -53,6 +54,7 @@ check(row1$mapping_status == "mapped_unique", "9 mapped_unique")
 check(all(mapping$mapping_status[mapping$source_row == 3] == "ambiguous") && sum(mapping$source_row == 3) == 2, "10 ambiguous")
 check(mapping$mapping_status[mapping$source_row == 4] == "unmapped", "11 unmapped")
 check(all(mapping$mapping_status[mapping$source_row == 5] == "ambiguous") && sum(mapping$source_row == 5) == 2, "12 protein group ambiguity")
+check(row1$uniprot_function == "Function 1" && row1$ncbi_summary == "Summary 1", "12a display annotation preservation")
 expanded_group <- rbind(catalog[catalog$source_row == 1, ], catalog[catalog$source_row == 1, ])
 expanded_group$uniprot_accession <- c("U1", "U2")
 expanded_group$source_row <- 99L

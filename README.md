@@ -1,9 +1,8 @@
 # PichAnalysis
 
-PichAnalysis is a cross-platform desktop foundation for reproducible proteomics
-projects. It creates and opens projects, imports tabular data, previews columns,
-helps interpret identifiers and quantitative columns, and checks a local R
-installation. Scientific analyses are not implemented yet.
+PichAnalysis is a cross-platform desktop application for reproducible proteomics
+projects. It creates and opens projects, imports tabular data, maps identifiers,
+and provides local Presence/Absence, Gene Ontology, KEGG, and Reactome analyses.
 
 ## Architecture
 
@@ -138,8 +137,23 @@ for human and mouse. Runs record R, GO.db, and OrgDb versions and preserve long
 annotations, unannotated proteins, per-ontology tables, workbook, plots,
 metadata, and immutable script snapshots under `analyses/GO/`.
 
-This release deliberately does not provide KEGG scientific analysis, Reactome,
-MitoCarta, STRING, differential analysis, or other later biological modules.
+This release deliberately does not provide MitoCarta, STRING, differential
+analysis, or other later biological modules.
+
+## Reactome analysis
+
+The Reactome analysis page uses an active local Homo sapiens Core Data snapshot
+installed through Database Manager. Analysis is fully offline: UniProt-first and
+NCBI Gene fallback mapping, pathway membership, hierarchy, frequency, and
+hypergeometric enrichment with Benjamini-Hochberg FDR are computed by the
+versioned R pipeline. The experimental Reactome-mapped set is the default
+background.
+
+The GUI provides target and background configuration, advanced statistical
+options, local pathway-to-protein and protein-to-pathway navigation, generated
+plots, exports, and immutable historical run loading. Ambiguous and unmapped
+entities remain visible. The page does not download Reactome data or provide a
+diagram viewer.
 
 ## Database Manager
 

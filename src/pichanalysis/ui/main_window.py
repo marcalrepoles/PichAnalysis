@@ -23,6 +23,7 @@ from ..core.mapping_analysis import (
 from ..core.organism import get_organism, has_biological_results, set_organism
 from ..core.go_analysis import export_go, prepare_go_arguments, read_go_outputs
 from ..core.kegg_analysis import prepare_kegg_arguments,read_kegg_outputs
+from ..core.reactome_analysis import ReactomeParameters
 from ..core.presence_analysis import (
     build_presence_arguments, export_presence, read_presence_outputs,
 )
@@ -32,6 +33,7 @@ from .analyses_page import AnalysesPage
 from .data_page import DataPage
 from .database_manager_page import DatabaseManagerPage
 from .mapping_worker import MappingWorker
+from .reactome_page import ReactomeAnalysisWorker
 from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
 
@@ -52,6 +54,7 @@ class MainWindow(QMainWindow):
         self.presence_worker: MappingWorker | None = None
         self.go_worker: MappingWorker | None = None
         self.kegg_worker: MappingWorker | None = None
+        self.reactome_worker: ReactomeAnalysisWorker | None = None
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
@@ -96,6 +99,9 @@ class MainWindow(QMainWindow):
         kegg=self.analyses_page.kegg_page
         kegg.run_requested.connect(self._run_kegg)
         kegg.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
+        reactome=self.analyses_page.reactome_page
+        reactome.run_requested.connect(self._run_reactome)
+        reactome.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -108,7 +114,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         if ((self.mapping_worker and self.mapping_worker.isRunning()) or
                 (self.presence_worker and self.presence_worker.isRunning()) or
-                (self.go_worker and self.go_worker.isRunning()) or (self.kegg_worker and self.kegg_worker.isRunning()) or self.database_manager_page.is_running()):
+                (self.go_worker and self.go_worker.isRunning()) or (self.kegg_worker and self.kegg_worker.isRunning()) or
+                (self.reactome_worker and self.reactome_worker.isRunning()) or self.database_manager_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
                 "Wait for the current analysis or database download before closing PichAnalysis.",
@@ -419,6 +426,35 @@ class MainWindow(QMainWindow):
     def _confirm_target_adjustment(self,count:int)->bool:
         box=QMessageBox(self);box.setWindowTitle("Target genes outside background");box.setText(f"{count} target genes are not present in the selected background.\n\nPathway enrichment requires the target set to be contained within the background.\n\nContinue using only target genes present in the background?")
         proceed=box.addButton("Continue",QMessageBox.ButtonRole.AcceptRole);box.addButton("Cancel",QMessageBox.ButtonRole.RejectRole);box.exec();return box.clickedButton()==proceed
+
+    def _run_reactome(self,parameters:dict,allow_target_outside_background:bool=False)->None:
+        if not self.project or self.reactome_worker:return
+        run_id=new_run_id();options=ReactomeParameters(**parameters,allow_target_outside_background=allow_target_outside_background)
+        worker=ReactomeAnalysisWorker(self.project,self.database_manager_page.manager,self.runtime,run_id,options)
+        self.reactome_worker=worker;self.analyses_page.reactome_page.set_running(True)
+        worker.succeeded.connect(self._reactome_finished)
+        worker.target_outside_background.connect(lambda details,p=parameters:self._reactome_target_outside(details,p))
+        worker.failed.connect(self._reactome_failed);worker.finished.connect(worker.deleteLater);worker.start()
+
+    def _reactome_finished(self,outputs)->None:
+        self.reactome_worker=None;self.analyses_page.reactome_page.set_running(False)
+        self.analyses_page.reactome_page.show_outputs(outputs)
+        if self.project:self.scripts_page.set_project_scripts(self.project.root/"scripts"/"runs")
+
+    def _reactome_failed(self,message:str)->None:
+        self.reactome_worker=None;self.analyses_page.reactome_page.set_running(False)
+        QMessageBox.warning(self,"Reactome analysis failed",message)
+
+    def _reactome_target_outside(self,details:dict,parameters:dict)->None:
+        self.reactome_worker=None;self.analyses_page.reactome_page.set_running(False)
+        if self._confirm_reactome_adjustment(details):self._run_reactome(parameters,True)
+
+    def _confirm_reactome_adjustment(self,details:dict)->bool:
+        count=len(details.get("entities_outside_background",[]));box=QMessageBox(self)
+        box.setWindowTitle("Target outside background")
+        box.setText(f"{count} canonical Reactome entity/entities are outside the selected background.\n\nThe analysis cannot continue without a decision. Continue will restrict the target to entities present in the selected background and record that adjustment in the run.")
+        proceed=box.addButton("Continue",QMessageBox.ButtonRole.AcceptRole);box.addButton("Cancel",QMessageBox.ButtonRole.RejectRole);box.exec()
+        return box.clickedButton()==proceed
 
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"

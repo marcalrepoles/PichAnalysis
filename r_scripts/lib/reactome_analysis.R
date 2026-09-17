@@ -13,7 +13,7 @@ validate_reactome_organism <- function(organism, tax_id) {
 empty_reactome_mapping <- function() data.frame(
   source_row=integer(), original_id=character(), reactome_entity_key=character(),
   candidate_source_id=character(), uniprot_accession=character(), ncbi_gene_id=character(),
-  gene_symbol=character(), protein_name=character(), mapping_route=character(),
+  gene_symbol=character(), protein_name=character(), uniprot_function=character(), ncbi_summary=character(), mapping_route=character(),
   mapping_status=character(), stringsAsFactors=FALSE)
 
 read_reactome_pathways <- function(path) {
@@ -50,7 +50,7 @@ read_reactome_relations <- function(path, pathways) {
 canonical_mapping <- function(catalog, uniprot, ncbi) {
   required <- c("source_row", "original_id")
   if (length(setdiff(required, names(catalog)))) stop("Catalog is missing required Reactome mapping columns.")
-  for (name in c("uniprot_accession", "ncbi_gene_id", "gene_symbol", "protein_name"))
+  for (name in c("uniprot_accession", "ncbi_gene_id", "gene_symbol", "protein_name", "uniprot_function", "ncbi_summary"))
     if (!name %in% names(catalog)) catalog[[name]] <- NA_character_
   rows <- list()
   known_uniprot <- unique(as.character(uniprot$source_id))
@@ -73,6 +73,7 @@ canonical_mapping <- function(catalog, uniprot, ncbi) {
         reactome_entity_key=key, candidate_source_id=candidate,
         uniprot_accession=collapse("uniprot_accession"), ncbi_gene_id=collapse("ncbi_gene_id"),
         gene_symbol=collapse("gene_symbol"), protein_name=collapse("protein_name"),
+        uniprot_function=collapse("uniprot_function"), ncbi_summary=collapse("ncbi_summary"),
         mapping_route=route, mapping_status=status, stringsAsFactors=FALSE)
     }
   }

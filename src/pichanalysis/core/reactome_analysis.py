@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -66,11 +67,15 @@ class ReactomeParameters:
 @dataclass(frozen=True)
 class ReactomeOutputs:
     mapping: pd.DataFrame
+    unmapped: pd.DataFrame
+    ambiguous: pd.DataFrame
     membership: pd.DataFrame
     hierarchy: pd.DataFrame
+    ancestry: pd.DataFrame
     frequency: pd.DataFrame
     enrichment: pd.DataFrame
     significant: pd.DataFrame
+    excluded: pd.DataFrame
     summary: pd.DataFrame
     metadata: dict[str, Any]
     graphs: tuple[Path, ...]
@@ -189,6 +194,8 @@ def read_reactome_outputs(project: Project, run_id: str | None = None) -> Reacto
     metadata_path = root / "metadata.json" if run_id else base / "latest_metadata.json"
     expected = {
         "mapping": root / "mapping" / "reactome_entity_mapping.csv",
+        "unmapped": root / "mapping" / "unmapped.csv",
+        "ambiguous": root / "mapping" / "ambiguous.csv",
         "membership": root / "pathways" / "pathway_membership.csv",
         "hierarchy": root / "pathways" / "pathway_hierarchy.csv",
         "frequency": root / "frequency" / "reactome_frequency.csv",
@@ -198,16 +205,22 @@ def read_reactome_outputs(project: Project, run_id: str | None = None) -> Reacto
         "workbook": root / "Reactome_analysis.xlsx",
     }
     missing = [str(path) for path in expected.values() if not path.is_file()]
-    graphs = tuple(sorted((root / "graphs").glob("*.*")))
-    if missing or len(graphs) < 6:
-        detail = ", ".join(missing or ["six Reactome plot files"])
+    graphs = tuple(sorted(path for path in (root / "graphs").glob("*.*") if path.suffix.lower() in {".png", ".pdf"}))
+    if missing:
+        detail = ", ".join(missing)
         raise MissingReactomeOutputError(f"Missing expected output: {detail}")
     try:
         metadata = json.loads(expected["metadata"].read_text(encoding="utf-8"))
+        ancestry_path = root / "pathways" / "pathway_ancestry.csv"
+        excluded_path = root / "enrichment" / "enrichment_excluded.csv"
         return ReactomeOutputs(
-            pd.read_csv(expected["mapping"]), pd.read_csv(expected["membership"]),
-            pd.read_csv(expected["hierarchy"]), pd.read_csv(expected["frequency"]),
+            pd.read_csv(expected["mapping"]), pd.read_csv(expected["unmapped"]),
+            pd.read_csv(expected["ambiguous"]), pd.read_csv(expected["membership"]),
+            pd.read_csv(expected["hierarchy"]),
+            pd.read_csv(ancestry_path) if ancestry_path.is_file() else pd.DataFrame(),
+            pd.read_csv(expected["frequency"]),
             pd.read_csv(expected["enrichment"]), pd.read_csv(expected["significant"]),
+            pd.read_csv(excluded_path) if excluded_path.is_file() else pd.DataFrame(),
             pd.read_csv(expected["summary"]), metadata, graphs, expected["workbook"], root,
             project.root / "scripts" / "runs" / f"{metadata['run_id']}_reactome")
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
@@ -234,3 +247,35 @@ def run_reactome_analysis(project: Project, manager: DatabaseManager, runtime: R
 def list_reactome_runs(project: Project) -> list[str]:
     root = project.root / "analyses" / "Reactome" / "runs"
     return sorted(path.name for path in root.iterdir() if path.is_dir()) if root.is_dir() else []
+
+
+def reactome_pathway_proteins(outputs: ReactomeOutputs, reactome_id: str) -> pd.DataFrame:
+    members = outputs.membership[outputs.membership["Reactome_ID"].astype(str) == str(reactome_id)].copy()
+    if members.empty:
+        return members
+    annotations = outputs.mapping[outputs.mapping["mapping_status"] == "mapped_unique"].copy()
+    extra = [column for column in ("reactome_entity_key", "protein_name", "uniprot_function", "ncbi_summary") if column in annotations]
+    if len(extra) > 1:
+        annotations = annotations[extra].drop_duplicates("reactome_entity_key")
+        members = members.merge(annotations, on="reactome_entity_key", how="left")
+    return members.drop_duplicates(["reactome_entity_key", "Reactome_ID"]).reset_index(drop=True)
+
+
+def reactome_protein_pathways(outputs: ReactomeOutputs, entity_key: str) -> pd.DataFrame:
+    rows = outputs.membership[outputs.membership["reactome_entity_key"].astype(str) == str(entity_key)].copy()
+    if rows.empty:
+        return rows
+    wanted = [column for column in ("Reactome_ID", "Pathway") if column in rows]
+    result = rows[wanted].drop_duplicates()
+    if not outputs.ancestry.empty and "pathway_id" in outputs.ancestry:
+        result = result.merge(outputs.ancestry, left_on="Reactome_ID", right_on="pathway_id", how="left").drop(columns=["pathway_id"])
+    return result.reset_index(drop=True)
+
+
+def export_reactome_artifact(source: Path, destination: Path) -> Path:
+    source, destination = Path(source), Path(destination)
+    if not source.is_file():
+        raise MissingReactomeOutputError(f"Missing expected output: {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return destination
