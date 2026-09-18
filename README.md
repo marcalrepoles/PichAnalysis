@@ -149,8 +149,13 @@ release-aware global cache and materialized as immutable, hashed project annotat
 
 Raw responses, memberships, repeated and overlapping domain locations, entry types, and available
 integration metadata are preserved. Once a set is Ready, all annotation loading and protein lookup
-operations work offline. Statistical frequency and enrichment analyses are not part of this
-infrastructure layer.
+operations work offline.
+
+The scientific backend analyzes unique UniProt accessions against an experimental target and
+background without network access. It produces separate InterPro and Pfam frequency and enrichment
+families, Benjamini-Hochberg correction, repeated-feature and overlap-preserving domain
+architectures, plots, workbooks, immutable runs, and complete provenance. A scientific GUI is not
+included yet.
 
 ## MitoCarta3.0 database support
 
