@@ -24,6 +24,7 @@ from ..core.organism import get_organism, has_biological_results, set_organism
 from ..core.go_analysis import export_go, prepare_go_arguments, read_go_outputs
 from ..core.kegg_analysis import prepare_kegg_arguments,read_kegg_outputs
 from ..core.reactome_analysis import ReactomeParameters
+from ..core.mitocarta_analysis import MitoCartaParameters
 from ..core.presence_analysis import (
     build_presence_arguments, export_presence, read_presence_outputs,
 )
@@ -34,6 +35,7 @@ from .data_page import DataPage
 from .database_manager_page import DatabaseManagerPage
 from .mapping_worker import MappingWorker
 from .reactome_page import ReactomeAnalysisWorker
+from .mitocarta_page import MitoCartaAnalysisWorker
 from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
 
@@ -55,6 +57,7 @@ class MainWindow(QMainWindow):
         self.go_worker: MappingWorker | None = None
         self.kegg_worker: MappingWorker | None = None
         self.reactome_worker: ReactomeAnalysisWorker | None = None
+        self.mitocarta_worker: MitoCartaAnalysisWorker | None = None
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
@@ -102,6 +105,9 @@ class MainWindow(QMainWindow):
         reactome=self.analyses_page.reactome_page
         reactome.run_requested.connect(self._run_reactome)
         reactome.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
+        mitocarta=self.analyses_page.mitocarta_page
+        mitocarta.run_requested.connect(self._run_mitocarta)
+        mitocarta.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -115,7 +121,8 @@ class MainWindow(QMainWindow):
         if ((self.mapping_worker and self.mapping_worker.isRunning()) or
                 (self.presence_worker and self.presence_worker.isRunning()) or
                 (self.go_worker and self.go_worker.isRunning()) or (self.kegg_worker and self.kegg_worker.isRunning()) or
-                (self.reactome_worker and self.reactome_worker.isRunning()) or self.database_manager_page.is_running()):
+                (self.reactome_worker and self.reactome_worker.isRunning()) or
+                (self.mitocarta_worker and self.mitocarta_worker.isRunning()) or self.database_manager_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
                 "Wait for the current analysis or database download before closing PichAnalysis.",
@@ -453,6 +460,35 @@ class MainWindow(QMainWindow):
         count=len(details.get("entities_outside_background",[]));box=QMessageBox(self)
         box.setWindowTitle("Target outside background")
         box.setText(f"{count} canonical Reactome entity/entities are outside the selected background.\n\nThe analysis cannot continue without a decision. Continue will restrict the target to entities present in the selected background and record that adjustment in the run.")
+        proceed=box.addButton("Continue",QMessageBox.ButtonRole.AcceptRole);box.addButton("Cancel",QMessageBox.ButtonRole.RejectRole);box.exec()
+        return box.clickedButton()==proceed
+
+    def _run_mitocarta(self,parameters:dict,allow_target_outside_background:bool=False)->None:
+        if not self.project or self.mitocarta_worker:return
+        run_id=new_run_id();options=MitoCartaParameters(**parameters,allow_target_outside_background=allow_target_outside_background)
+        worker=MitoCartaAnalysisWorker(self.project,self.database_manager_page.manager,self.runtime,run_id,options)
+        self.mitocarta_worker=worker;self.analyses_page.mitocarta_page.set_running(True)
+        worker.succeeded.connect(self._mitocarta_finished)
+        worker.target_outside_background.connect(lambda details,p=parameters:self._mitocarta_target_outside(details,p))
+        worker.failed.connect(self._mitocarta_failed);worker.finished.connect(worker.deleteLater);worker.start()
+
+    def _mitocarta_finished(self,outputs)->None:
+        self.mitocarta_worker=None;self.analyses_page.mitocarta_page.set_running(False)
+        self.analyses_page.mitocarta_page.show_outputs(outputs)
+        if self.project:self.scripts_page.set_project_scripts(self.project.root/"scripts"/"runs")
+
+    def _mitocarta_failed(self,message:str)->None:
+        self.mitocarta_worker=None;self.analyses_page.mitocarta_page.set_running(False)
+        QMessageBox.warning(self,"MitoCarta analysis failed",message)
+
+    def _mitocarta_target_outside(self,details:dict,parameters:dict)->None:
+        self.mitocarta_worker=None;self.analyses_page.mitocarta_page.set_running(False)
+        if self._confirm_mitocarta_adjustment(details):self._run_mitocarta(parameters,True)
+
+    def _confirm_mitocarta_adjustment(self,details:dict)->bool:
+        count=len(details.get("entities_outside_background",[]));target=details.get("initial_target_size",details.get("target_size","unknown"));background=details.get("initial_background_size",details.get("background_size","unknown"));box=QMessageBox(self)
+        box.setWindowTitle("Target outside background")
+        box.setText(f"{count} gene-resolved target entity/entities are outside the selected background (target size: {target}; background size: {background}).\n\nMitoCarta enrichment requires the target to be contained within the background. Continue will restrict the target to entities present in the background and record that adjustment in the run.")
         proceed=box.addButton("Continue",QMessageBox.ButtonRole.AcceptRole);box.addButton("Cancel",QMessageBox.ButtonRole.RejectRole);box.exec()
         return box.clickedButton()==proceed
 

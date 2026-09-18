@@ -17,6 +17,7 @@ from .presence_page import PresencePage
 from .go_page import GOPage
 from .kegg_page import KEGGPage
 from .reactome_page import ReactomePage
+from .mitocarta_page import MitoCartaPage
 from ..core.database_manager import DatabaseManager
 
 
@@ -97,12 +98,14 @@ class AnalysesPage(QWidget):
         self.go_page = GOPage()
         self.kegg_page = KEGGPage(database_manager or DatabaseManager())
         self.reactome_page = ReactomePage(database_manager or self.kegg_page.manager)
+        self.mitocarta_page = MitoCartaPage(database_manager or self.kegg_page.manager)
         module_tabs = QTabWidget()
         module_tabs.addTab(mapping_page, "Identificação e anotação")
         module_tabs.addTab(self.presence_page, "Presence / absence")
         module_tabs.addTab(self.go_page, "Gene Ontology")
         module_tabs.addTab(self.kegg_page, "KEGG Pathways")
         module_tabs.addTab(self.reactome_page, "Reactome")
+        module_tabs.addTab(self.mitocarta_page, "MitoCarta")
         outer_layout = QVBoxLayout(self)
         outer_layout.addWidget(module_tabs)
 
@@ -124,6 +127,7 @@ class AnalysesPage(QWidget):
         self.go_page.set_project(project)
         self.kegg_page.set_project(project)
         self.reactome_page.set_project(project)
+        self.mitocarta_page.set_project(project)
         if project is None:
             self.run_button.setEnabled(False)
             return

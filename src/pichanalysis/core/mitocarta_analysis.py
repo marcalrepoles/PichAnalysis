@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -58,7 +59,7 @@ def mitocarta_readiness(project: Project|None,manager: DatabaseManager)->tuple[b
     if project is None:return False,"Open a project."
     organism=get_organism(project)
     if organism is None:return False,"Configure the project organism."
-    if organism.name!="Homo sapiens" or organism.tax_id!="9606":return False,"Unsupported organism: MitoCarta analysis currently supports only Homo sapiens."
+    if organism.name!="Homo sapiens" or organism.tax_id!="9606":return False,"MitoCarta analysis currently supports Homo sapiens only."
     if not manager.mitocarta.is_ready():return False,"MitoCarta database unavailable: install MitoCarta3.0 Core Data first."
     if not (project.root/"mapping"/"tables"/"protein_catalog.csv").is_file():return False,"Run Identification and Annotation before MitoCarta analysis."
     return True,"Ready for MitoCarta analysis."
@@ -82,7 +83,7 @@ def select_mitocarta_set(project:Project,selection:str,manual_rows=())->pd.DataF
 def prepare_mitocarta_arguments(project:Project,manager:DatabaseManager,*,run_id:str,parameters:MitoCartaParameters|None=None)->list[str]:
     params=parameters or MitoCartaParameters();ready,reason=mitocarta_readiness(project,manager)
     if not ready:
-        if reason.startswith("Unsupported organism"):raise UnsupportedMitoCartaOrganismError(reason)
+        if "supports Homo sapiens only" in reason:raise UnsupportedMitoCartaOrganismError(reason)
         if reason.startswith("MitoCarta database unavailable"):raise MitoCartaDatabaseUnavailableError(reason)
         raise MitoCartaAnalysisError(reason)
     if params.minimum_overlap<1:raise MitoCartaAnalysisError("Minimum overlap must be at least 1.")
@@ -127,3 +128,48 @@ def run_mitocarta_analysis(project:Project,manager:DatabaseManager,runtime:RRunt
 
 def list_mitocarta_runs(project:Project)->list[str]:
     root=project.root/"analyses"/"MitoCarta"/"runs";return sorted(path.name for path in root.iterdir() if path.is_dir()) if root.is_dir() else []
+
+
+def _genes_field(value)->set[str]:
+    if pd.isna(value): return set()
+    return {item.strip() for item in str(value).split(";") if item.strip()}
+
+
+def mitocarta_target_genes(outputs:MitoCartaOutputs)->pd.DataFrame:
+    path=outputs.run_root/"raw"/"target_genes.csv"
+    if not path.is_file():return outputs.membership.iloc[0:0].copy()
+    keys=set(pd.read_csv(path).get("canonical_gene_key",pd.Series(dtype=str)).astype(str))
+    return outputs.membership[outputs.membership.canonical_gene_key.astype(str).isin(keys)&outputs.membership.is_mitocarta.astype(str).str.lower().isin({"true","1","t"})].copy()
+
+
+def mitocarta_gene_subcompartments(outputs:MitoCartaOutputs,canonical_key:str)->pd.DataFrame:
+    genes=mitocarta_target_genes(outputs);row=genes[genes.canonical_gene_key.astype(str)==str(canonical_key)]
+    if row.empty:return pd.DataFrame(columns=["Subcompartment"])
+    symbol=str(row.iloc[0].gene_symbol);values=[str(value) for value in outputs.subcompartment_frequency.loc[outputs.subcompartment_frequency.Genes.map(lambda x:symbol in _genes_field(x)),"Subcompartment"]]
+    return pd.DataFrame({"Subcompartment":values}).drop_duplicates().reset_index(drop=True)
+
+
+def mitocarta_compartment_genes(outputs:MitoCartaOutputs,compartment:str)->pd.DataFrame:
+    rows=outputs.subcompartment_frequency[outputs.subcompartment_frequency.Subcompartment.astype(str)==str(compartment)]
+    symbols=set().union(*(_genes_field(value) for value in rows.Genes)) if not rows.empty else set()
+    return mitocarta_target_genes(outputs).loc[lambda frame:frame.gene_symbol.astype(str).isin(symbols),["canonical_gene_key","gene_symbol","ncbi_gene_id"]].drop_duplicates().reset_index(drop=True)
+
+
+def mitocarta_gene_pathways(outputs:MitoCartaOutputs,canonical_key:str)->pd.DataFrame:
+    genes=mitocarta_target_genes(outputs);row=genes[genes.canonical_gene_key.astype(str)==str(canonical_key)]
+    if row.empty:return pd.DataFrame(columns=["MitoPathway","pathway_full"])
+    symbol=str(row.iloc[0].gene_symbol);frame=outputs.pathway_frequency[outputs.pathway_frequency.Genes.map(lambda x:symbol in _genes_field(x))].copy()
+    wanted=[column for column in ("MitoPathway","pathway_full","pathway_level_1","pathway_level_2","pathway_level_3") if column in frame]
+    return frame[wanted].drop_duplicates().reset_index(drop=True)
+
+
+def mitocarta_pathway_genes(outputs:MitoCartaOutputs,pathway:str)->pd.DataFrame:
+    rows=outputs.pathway_frequency[outputs.pathway_frequency.MitoPathway.astype(str)==str(pathway)]
+    symbols=set().union(*(_genes_field(value) for value in rows.Genes)) if not rows.empty else set()
+    return mitocarta_target_genes(outputs).loc[lambda frame:frame.gene_symbol.astype(str).isin(symbols),["canonical_gene_key","gene_symbol","ncbi_gene_id"]].drop_duplicates().reset_index(drop=True)
+
+
+def export_mitocarta_artifact(source:Path,destination:Path)->Path:
+    source,destination=Path(source),Path(destination)
+    if not source.is_file():raise MissingMitoCartaOutputError(f"Missing expected output: {source}")
+    destination.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,destination);return destination

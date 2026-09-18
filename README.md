@@ -145,7 +145,13 @@ analysis, or other later biological modules.
 The Database Manager can install the official MitoCarta3.0 database for Homo sapiens as a reusable
 local snapshot. It normalizes the human gene inventory, sub-mitochondrial compartment annotations,
 and MitoPathways membership and hierarchy tables. After installation these database resources are
-available offline. Experimental MitoCarta analysis and enrichment are not included yet.
+available offline.
+
+The Analyses workspace provides the scientific MitoCarta3.0 workflow for human projects. It runs the
+validated gene-level pipeline in the background and presents membership, overall enrichment,
+sub-compartments, MitoPathways, bidirectional gene navigation, plots, unchanged artifact exports,
+and immutable historical runs. Analysis remains fully offline; data installation is handled only by
+Database Manager.
 
 ## Reactome analysis
 
