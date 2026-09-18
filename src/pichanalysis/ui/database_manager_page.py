@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 from ..core.database_manager import DatabaseManager
 from ..core.database_registry import DatabaseState
 from ..core.databases.kegg import KEGG_USAGE_URL
-from ..core.databases.reactome import CORE_FILES, ReactomeDownloadCancelled, ReactomeProvider
+from ..core.databases.reactome import CORE_FILES, DIAGRAM_ARCHIVE, ReactomeDownloadCancelled, ReactomeProvider
 
 ACADEMIC_NOTICE = (
     "The KEGG REST API is provided for academic use by academic users. "
@@ -105,6 +105,39 @@ class ReactomeCoreDownloadWorker(QThread):
         self._cancel.set()
 
 
+class ReactomeDiagramDownloadWorker(QThread):
+    progress = Signal(dict)
+    succeeded = Signal(str)
+    failed = Signal(str)
+    canceled = Signal(str)
+
+    def __init__(self, manager: DatabaseManager, provider: ReactomeProvider | None = None):
+        super().__init__(); self.manager = manager; self.provider = provider or ReactomeProvider(); self._cancel = threading.Event()
+
+    def run(self) -> None:
+        snapshot = None
+        try:
+            snapshot = self.manager.reactome.create_diagram_staging()
+            self.manager.reactome.mark_downloading(snapshot, "diagrams")
+            archive = snapshot / "archives" / DIAGRAM_ARCHIVE
+            info = self.provider.download(DIAGRAM_ARCHIVE, archive,
+                progress=lambda name, done, total: self.progress.emit({"stage":"download","filename":name,"bytes_downloaded":done,"bytes_total":total}),
+                cancel_requested=self._cancel.is_set)
+            completed = self.manager.reactome.install_diagrams(snapshot, archive, info,
+                progress=lambda done,total,name:self.progress.emit({"stage":"index" if name.startswith("__INDEX") else "extract","filename":name,"items_done":done,"items_total":total}),
+                cancel_requested=self._cancel.is_set)
+            self.succeeded.emit(str(completed))
+        except ReactomeDownloadCancelled as error:
+            if snapshot is not None: self.manager.reactome.mark_incomplete(snapshot, "diagrams")
+            self.canceled.emit(str(error))
+        except Exception as error:
+            if snapshot is not None and self.manager.reactome.manifest(snapshot).get("status") != DatabaseState.ERROR:
+                self.manager.reactome.mark_component_error(snapshot, "diagrams", str(error))
+            self.manager.logger.exception("Reactome diagram download failed"); self.failed.emit(str(error))
+
+    def cancel(self) -> None: self._cancel.set()
+
+
 class ComponentDialog(QDialog):
     def __init__(self, manager: DatabaseManager, parent=None):
         super().__init__(parent)
@@ -146,6 +179,7 @@ class DatabaseManagerPage(QWidget):
         self.manager = manager or DatabaseManager()
         self.worker: DatabaseDownloadWorker | None = None
         self.reactome_worker: ReactomeCoreDownloadWorker | None = None
+        self.reactome_diagram_worker: ReactomeDiagramDownloadWorker | None = None
         self._reactome_attempt_error = ""
 
         layout = QVBoxLayout(self)
@@ -185,6 +219,7 @@ class DatabaseManagerPage(QWidget):
         card = QGroupBox("Reactome — Homo sapiens")
         layout = QVBoxLayout(card)
         self.reactome_state_label = QLabel()
+        self.reactome_diagram_state_label = QLabel()
         self.reactome_details = QLabel()
         self.reactome_details.setWordWrap(True)
         self.reactome_progress = QProgressBar()
@@ -193,18 +228,20 @@ class DatabaseManagerPage(QWidget):
         self.reactome_error_label = QLabel()
         self.reactome_error_label.setWordWrap(True)
         self.reactome_primary_button = QPushButton("Download")
+        self.reactome_diagram_button = QPushButton("Download diagrams")
         self.reactome_cancel_button = QPushButton("Cancel")
         self.reactome_folder_button = QPushButton("Open database folder")
         actions = QHBoxLayout()
-        for button in (self.reactome_primary_button, self.reactome_cancel_button, self.reactome_folder_button):
+        for button in (self.reactome_primary_button, self.reactome_diagram_button, self.reactome_cancel_button, self.reactome_folder_button):
             actions.addWidget(button)
         for widget in (
-            self.reactome_state_label, self.reactome_details, self.reactome_progress,
+            self.reactome_state_label, self.reactome_diagram_state_label, self.reactome_details, self.reactome_progress,
             self.reactome_progress_text, self.reactome_error_label,
         ):
             layout.addWidget(widget)
         layout.addLayout(actions)
         self.reactome_primary_button.clicked.connect(self._start_reactome)
+        self.reactome_diagram_button.clicked.connect(self._start_reactome_diagrams)
         self.reactome_cancel_button.clicked.connect(self.cancel_reactome)
         self.reactome_folder_button.clicked.connect(self._open_reactome_folder)
         return card
@@ -229,9 +266,14 @@ class DatabaseManagerPage(QWidget):
         database = self.manager.reactome
         active = database.active_snapshot()
         manifest = database.manifest(active) if active else {}
-        running = bool(self.reactome_worker and self.reactome_worker.isRunning())
+        core_running = bool(self.reactome_worker and self.reactome_worker.isRunning())
+        diagram_running = bool(self.reactome_diagram_worker and self.reactome_diagram_worker.isRunning())
+        running = core_running or diagram_running
         state = DatabaseState.DOWNLOADING if running else database.state()
+        diagram_info = database.diagram_manifest()
+        diagram_state = "Downloading" if diagram_running else database.diagram_state()
         self.reactome_state_label.setText(f"Core Data: {state}")
+        self.reactome_diagram_state_label.setText(f"Pathway Diagrams: {diagram_state}")
         release = manifest.get("release_version")
         release_text = str(release) if release and str(release).lower() != "unknown" else "Unknown"
         snapshot_text = active.name if active else "—"
@@ -241,6 +283,8 @@ class DatabaseManagerPage(QWidget):
         )
         self.reactome_primary_button.setText("Update" if active else "Download")
         self.reactome_primary_button.setEnabled(not running)
+        self.reactome_diagram_button.setText("Update diagrams" if database.is_diagrams_ready() else "Download diagrams")
+        self.reactome_diagram_button.setEnabled(not running and active is not None)
         self.reactome_cancel_button.setEnabled(running)
         self.reactome_error_label.setText(
             f"Last attempt failed: {self._reactome_attempt_error}" if self._reactome_attempt_error else ""
@@ -313,6 +357,36 @@ class DatabaseManagerPage(QWidget):
         self.reactome_worker.start()
         self._refresh_reactome()
 
+    def _start_reactome_diagrams(self) -> None:
+        if self.reactome_diagram_worker and self.reactome_diagram_worker.isRunning(): return
+        self._reactome_attempt_error = ""; self.reactome_diagram_worker = ReactomeDiagramDownloadWorker(self.manager)
+        self.reactome_diagram_worker.progress.connect(self._show_reactome_diagram_progress)
+        self.reactome_diagram_worker.succeeded.connect(self._reactome_diagram_finished)
+        self.reactome_diagram_worker.failed.connect(self._reactome_diagram_failed)
+        self.reactome_diagram_worker.canceled.connect(self._reactome_diagram_canceled)
+        self.reactome_diagram_worker.finished.connect(self.reactome_diagram_worker.deleteLater)
+        self.reactome_diagram_worker.start(); self._refresh_reactome()
+
+    def _show_reactome_diagram_progress(self, payload: dict) -> None:
+        if payload.get("stage") == "download":
+            done,total=int(payload.get("bytes_downloaded",0)),int(payload.get("bytes_total",0))
+            if total:self.reactome_progress.setRange(0,total);self.reactome_progress.setValue(done)
+            else:self.reactome_progress.setRange(0,0)
+            self.reactome_progress_text.setText(f"Downloading Reactome Pathway Diagrams\n{payload.get('filename')}\n{self._format_bytes(done)}" + (f" / {self._format_bytes(total)}" if total else ""))
+        elif payload.get("stage") == "extract":
+            done,total=int(payload.get("items_done",0)),max(int(payload.get("items_total",1)),1);self.reactome_progress.setRange(0,total);self.reactome_progress.setValue(done);self.reactome_progress_text.setText(f"Validating and indexing diagrams\n{done} / {total}: {payload.get('filename','')}")
+        else:
+            self.reactome_progress.setRange(0,0);self.reactome_progress_text.setText("Indexing Reactome Pathway Diagrams")
+
+    def _reactome_diagram_finished(self, _snapshot: str) -> None:
+        self.reactome_diagram_worker=None;self.reactome_progress.setRange(0,1);self.reactome_progress.setValue(1);self.reactome_progress_text.setText("Reactome diagrams are ready.");self.refresh()
+
+    def _reactome_diagram_failed(self, message: str) -> None:
+        self.reactome_diagram_worker=None;self._reactome_attempt_error=message;self.reactome_progress_text.setText("Reactome diagram update failed; the previous snapshot remains active.");self.refresh();QMessageBox.warning(self,"Reactome diagram download failed",message)
+
+    def _reactome_diagram_canceled(self, message: str) -> None:
+        self.reactome_diagram_worker=None;self.reactome_progress.setRange(0,1);self.reactome_progress.setValue(0);self.reactome_progress_text.setText(message);self.refresh()
+
     def _show_reactome_progress(self, payload: dict) -> None:
         downloaded = int(payload.get("bytes_downloaded", 0))
         total = int(payload.get("bytes_total", 0))
@@ -365,11 +439,15 @@ class DatabaseManagerPage(QWidget):
         if self.reactome_worker:
             self.reactome_progress_text.setText("Cancellation requested. The current download will stop safely.")
             self.reactome_worker.cancel()
+        if self.reactome_diagram_worker:
+            self.reactome_progress_text.setText("Cancellation requested. The diagram update will stop safely.")
+            self.reactome_diagram_worker.cancel()
 
     def is_running(self) -> bool:
         return bool(
             (self.worker and self.worker.isRunning())
             or (self.reactome_worker and self.reactome_worker.isRunning())
+            or (self.reactome_diagram_worker and self.reactome_diagram_worker.isRunning())
         )
 
     def _open_folder(self) -> None:

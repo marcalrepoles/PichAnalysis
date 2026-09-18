@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 from typing import Callable
 
 import pandas as pd
@@ -9,7 +10,7 @@ from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
     QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QProgressBar,
-    QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from ..core.database_manager import DatabaseManager
@@ -56,6 +57,8 @@ class ReactomePage(QWidget):
         self.project: Project | None = None
         self.outputs: ReactomeOutputs | None = None
         self._current_frames: dict[QTableWidget, pd.DataFrame] = {}
+        self._diagram_pixmap = QPixmap()
+        self._diagram_scale = 1.0
 
         self.database = QLabel()
         self.database.setWordWrap(True)
@@ -148,6 +151,16 @@ class ReactomePage(QWidget):
         pathway_layout.addWidget(QLabel("Select pathway by Reactome ID"))
         pathway_layout.addWidget(self.pathway)
         pathway_layout.addWidget(self.pathway_members)
+        self.diagram_status = QLabel("No pathway selected.")
+        self.diagram_status.setWordWrap(True)
+        self.diagram_image = QLabel("No local diagram is available.")
+        self.diagram_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.diagram_scroll = QScrollArea(); self.diagram_scroll.setWidget(self.diagram_image); self.diagram_scroll.setWidgetResizable(True); self.diagram_scroll.setMinimumHeight(280)
+        self.diagram_open = QPushButton("Open pathway diagram"); self.diagram_fit = QPushButton("Fit to Window"); self.diagram_actual = QPushButton("Actual Size"); self.diagram_zoom_out = QPushButton("Zoom Out"); self.diagram_zoom_in = QPushButton("Zoom In"); self.diagram_export = QPushButton("Export Reactome Diagram...")
+        diagram_actions = QHBoxLayout()
+        for button in (self.diagram_open,self.diagram_fit,self.diagram_actual,self.diagram_zoom_out,self.diagram_zoom_in,self.diagram_export): diagram_actions.addWidget(button)
+        pathway_layout.addWidget(self.diagram_status); pathway_layout.addLayout(diagram_actions); pathway_layout.addWidget(self.diagram_scroll)
+        attribution = QLabel("Reactome pathway diagrams — © Reactome, licensed under CC BY 4.0."); attribution.setWordWrap(True); pathway_layout.addWidget(attribution)
 
         self.protein = QComboBox()
         self.protein_pathways = QTableWidget()
@@ -156,6 +169,7 @@ class ReactomePage(QWidget):
         protein_layout.addWidget(QLabel("Select experimental entity"))
         protein_layout.addWidget(self.protein)
         protein_layout.addWidget(self.protein_pathways)
+        self.open_protein_diagram = QPushButton("Open pathway diagram"); protein_layout.addWidget(self.open_protein_diagram)
 
         self.mapping = QTableWidget()
         self.unmapped = QTableWidget()
@@ -220,6 +234,10 @@ class ReactomePage(QWidget):
         self.export_workbook.clicked.connect(self._export_workbook)
         self.export_graph.clicked.connect(self._export_graph)
         self.open_folder.clicked.connect(self._open_results_folder)
+        self.diagram_open.clicked.connect(lambda:self._show_diagram(self.pathway.currentData()))
+        self.diagram_fit.clicked.connect(self._fit_diagram); self.diagram_actual.clicked.connect(lambda:self._set_diagram_scale(1.0)); self.diagram_zoom_out.clicked.connect(lambda:self._set_diagram_scale(self._diagram_scale/1.25)); self.diagram_zoom_in.clicked.connect(lambda:self._set_diagram_scale(self._diagram_scale*1.25)); self.diagram_export.clicked.connect(self._export_diagram)
+        self.protein_pathways.cellDoubleClicked.connect(self._open_protein_pathway)
+        self.open_protein_diagram.clicked.connect(lambda:self._open_protein_pathway(self.protein_pathways.currentRow(),0))
 
     def set_project(self, project: Project | None) -> None:
         self.project = project
@@ -245,7 +263,7 @@ class ReactomePage(QWidget):
         release_text = str(release) if release and str(release).lower() != "unknown" else "Unknown"
         status = "Ready" if self.manager.reactome.is_core_ready() else "Not installed"
         self.database.setText(
-            f"Core Data status: {status}\nRelease: {release_text}\nSnapshot: {snapshot.name if snapshot else '—'}"
+            f"Core Data status: {status}\nDiagrams: {'Ready' if self.manager.reactome.is_diagrams_ready() else 'Not installed'}\nRelease: {release_text}\nSnapshot: {snapshot.name if snapshot else '—'}"
         )
         state = reactome_readiness(self.project, self.manager)
         message = state.reason
@@ -413,14 +431,46 @@ class ReactomePage(QWidget):
     def _show_pathway_members(self) -> None:
         if not self.outputs or not self.pathway.currentData():
             self._fill(self.pathway_members, pd.DataFrame())
-            return
-        self._fill(self.pathway_members, reactome_pathway_proteins(self.outputs, self.pathway.currentData()))
+            self._show_diagram(None); return
+        frame=reactome_pathway_proteins(self.outputs, self.pathway.currentData()).copy();frame["Diagram_available"]=self.manager.reactome.has_diagram(self.pathway.currentData());self._fill(self.pathway_members, frame)
+        self._show_diagram(self.pathway.currentData())
 
     def _show_protein_pathways(self) -> None:
         if not self.outputs or not self.protein.currentData():
             self._fill(self.protein_pathways, pd.DataFrame())
             return
-        self._fill(self.protein_pathways, reactome_protein_pathways(self.outputs, self.protein.currentData()))
+        frame=reactome_protein_pathways(self.outputs, self.protein.currentData()).copy()
+        if "Reactome_ID" in frame: frame["Diagram_available"]=frame["Reactome_ID"].map(self.manager.reactome.has_diagram)
+        self._fill(self.protein_pathways, frame)
+
+    def _show_diagram(self, reactome_id) -> None:
+        path=self.manager.reactome.diagram_path(str(reactome_id)) if reactome_id else None
+        self._diagram_pixmap=QPixmap(str(path)) if path else QPixmap(); self.diagram_export.setEnabled(bool(path));self.diagram_open.setEnabled(bool(path))
+        if self._diagram_pixmap.isNull(): self.diagram_image.clear();self.diagram_image.setText("No local diagram is available for this pathway.");self.diagram_status.setText(f"{reactome_id or 'Pathway'}: diagram not available locally.");return
+        self.diagram_status.setText(f"{reactome_id}: local diagram available.");self._fit_diagram()
+
+    def _set_diagram_scale(self, scale: float) -> None:
+        if self._diagram_pixmap.isNull(): return
+        self._diagram_scale=max(0.1,min(8.0,scale));size=self._diagram_pixmap.size()*self._diagram_scale;self.diagram_image.setPixmap(self._diagram_pixmap.scaled(size,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation));self.diagram_image.resize(self.diagram_image.pixmap().size())
+
+    def _fit_diagram(self) -> None:
+        if self._diagram_pixmap.isNull(): return
+        viewport=self.diagram_scroll.viewport().size();self._set_diagram_scale(min(viewport.width()/self._diagram_pixmap.width(),viewport.height()/self._diagram_pixmap.height()))
+
+    def _export_diagram(self) -> None:
+        source=self.manager.reactome.diagram_path(str(self.pathway.currentData()))
+        if not source:return
+        filename,_=QFileDialog.getSaveFileName(self,"Export original Reactome diagram",source.name,"PNG (*.png)")
+        if filename:
+            destination=Path(filename);destination=destination if destination.suffix else destination.with_suffix(".png")
+            try:shutil.copy2(source,destination)
+            except OSError as error:QMessageBox.warning(self,"Export failed",str(error))
+
+    def _open_protein_pathway(self,row:int,_column:int) -> None:
+        frame=self._current_frames.get(self.protein_pathways)
+        if frame is None or row>=len(frame) or "Reactome_ID" not in frame:return
+        identifier=str(frame.iloc[row]["Reactome_ID"]);index=self.pathway.findData(identifier)
+        if index>=0:self.pathway.setCurrentIndex(index);self.tabs.setCurrentIndex(4)
 
     def _show_graph(self) -> None:
         data = self.graph_choice.currentData()

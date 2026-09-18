@@ -153,7 +153,11 @@ The GUI provides target and background configuration, advanced statistical
 options, local pathway-to-protein and protein-to-pathway navigation, generated
 plots, exports, and immutable historical run loading. Ambiguous and unmapped
 entities remain visible. The page does not download Reactome data or provide a
-diagram viewer.
+local diagram viewer. The optional official `diagrams.png.tgz` component is installed as a new atomic
+snapshot, independently of Reactome Core Data. The Database Manager shows its status and supports
+download, update, progress, and cancellation. Pathway results can open the original local PNG with
+fit/actual-size/zoom controls and export an unchanged copy. Reactome diagrams are attributed to
+Reactome and licensed under CC BY 4.0; the tabular Core Data remains CC0.
 
 ## Database Manager
 
