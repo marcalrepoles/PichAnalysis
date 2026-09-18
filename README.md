@@ -140,6 +140,18 @@ metadata, and immutable script snapshots under `analyses/GO/`.
 This release deliberately does not provide STRING, differential
 analysis, or other later biological modules.
 
+## InterPro/Pfam annotation support
+
+Database Manager retrieves compact release metadata exclusively from the official EMBL-EBI
+InterPro API. Project workflows can then selectively acquire InterPro integrated entries and Pfam
+signatures for an explicit collection of UniProt accessions. Responses are reused through a
+release-aware global cache and materialized as immutable, hashed project annotation sets.
+
+Raw responses, memberships, repeated and overlapping domain locations, entry types, and available
+integration metadata are preserved. Once a set is Ready, all annotation loading and protein lookup
+operations work offline. Statistical frequency and enrichment analyses are not part of this
+infrastructure layer.
+
 ## MitoCarta3.0 database support
 
 The Database Manager can install the official MitoCarta3.0 database for Homo sapiens as a reusable
