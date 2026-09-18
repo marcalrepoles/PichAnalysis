@@ -14,6 +14,7 @@ from ..core.database_manager import DatabaseManager
 from ..core.database_registry import DatabaseState
 from ..core.databases.kegg import KEGG_USAGE_URL
 from ..core.databases.reactome import CORE_FILES, DIAGRAM_ARCHIVE, ReactomeDownloadCancelled, ReactomeProvider
+from ..core.databases.mitocarta import FILES as MITOCARTA_FILES, MitoCartaDownloadCancelled, MitoCartaProvider
 
 ACADEMIC_NOTICE = (
     "The KEGG REST API is provided for academic use by academic users. "
@@ -138,6 +139,33 @@ class ReactomeDiagramDownloadWorker(QThread):
     def cancel(self) -> None: self._cancel.set()
 
 
+class MitoCartaDownloadWorker(QThread):
+    progress = Signal(dict); succeeded = Signal(str); failed = Signal(str); canceled = Signal(str)
+    def __init__(self, manager: DatabaseManager, provider: MitoCartaProvider | None = None):
+        super().__init__(); self.manager=manager; self.provider=provider or MitoCartaProvider(); self._cancel=threading.Event()
+    def run(self) -> None:
+        snapshot=None
+        try:
+            snapshot=self.manager.mitocarta.create_staging_snapshot();self.manager.mitocarta.mark_downloading(snapshot);information=[]
+            for index,name in enumerate(MITOCARTA_FILES,1):
+                if self._cancel.is_set():raise MitoCartaDownloadCancelled("MitoCarta3.0 download was canceled.")
+                self.progress.emit(self._payload(index,name,0,0,"download"))
+                information.append(self.provider.download(name,snapshot/"raw"/name,
+                    progress=lambda filename,done,total,i=index:self.progress.emit(self._payload(i,filename,done,total,"download")),cancel_requested=self._cancel.is_set))
+            if self._cancel.is_set():raise MitoCartaDownloadCancelled("MitoCarta3.0 download was canceled.")
+            self.progress.emit(self._payload(2,"Validating and normalizing MitoCarta3.0",0,0,"processing"))
+            completed=self.manager.mitocarta.finalize_snapshot(snapshot,information);self.succeeded.emit(str(completed))
+        except MitoCartaDownloadCancelled as error:
+            if snapshot is not None:self.manager.mitocarta.mark_incomplete(snapshot)
+            self.canceled.emit(str(error))
+        except Exception as error:
+            if snapshot is not None and self.manager.mitocarta.manifest(snapshot).get("status")!=DatabaseState.ERROR:self.manager.mitocarta.mark_error(snapshot,str(error))
+            self.manager.logger.exception("MitoCarta3.0 download failed");self.failed.emit(str(error))
+    @staticmethod
+    def _payload(index,name,done,total,stage):return {"stage":stage,"file_index":index,"file_total":len(MITOCARTA_FILES),"filename":name,"bytes_downloaded":done,"bytes_total":total}
+    def cancel(self):self._cancel.set()
+
+
 class ComponentDialog(QDialog):
     def __init__(self, manager: DatabaseManager, parent=None):
         super().__init__(parent)
@@ -181,10 +209,13 @@ class DatabaseManagerPage(QWidget):
         self.reactome_worker: ReactomeCoreDownloadWorker | None = None
         self.reactome_diagram_worker: ReactomeDiagramDownloadWorker | None = None
         self._reactome_attempt_error = ""
+        self.mitocarta_worker: MitoCartaDownloadWorker | None = None
+        self._mitocarta_attempt_error = ""
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._build_kegg_card())
         layout.addWidget(self._build_reactome_card())
+        layout.addWidget(self._build_mitocarta_card())
         layout.addStretch()
         self.refresh()
 
@@ -246,6 +277,17 @@ class DatabaseManagerPage(QWidget):
         self.reactome_folder_button.clicked.connect(self._open_reactome_folder)
         return card
 
+    def _build_mitocarta_card(self) -> QGroupBox:
+        card=QGroupBox("MitoCarta3.0 — Homo sapiens");layout=QVBoxLayout(card)
+        self.mitocarta_state_label=QLabel();self.mitocarta_details=QLabel();self.mitocarta_details.setWordWrap(True)
+        self.mitocarta_progress=QProgressBar();self.mitocarta_progress.setRange(0,1);self.mitocarta_progress_text=QLabel("No download is running.")
+        self.mitocarta_error_label=QLabel();self.mitocarta_error_label.setWordWrap(True)
+        self.mitocarta_primary_button=QPushButton("Download");self.mitocarta_cancel_button=QPushButton("Cancel");self.mitocarta_folder_button=QPushButton("Open database folder")
+        actions=QHBoxLayout()
+        for button in (self.mitocarta_primary_button,self.mitocarta_cancel_button,self.mitocarta_folder_button):actions.addWidget(button)
+        for widget in (self.mitocarta_state_label,self.mitocarta_details,self.mitocarta_progress,self.mitocarta_progress_text,self.mitocarta_error_label):layout.addWidget(widget)
+        layout.addLayout(actions);self.mitocarta_primary_button.clicked.connect(self._start_mitocarta);self.mitocarta_cancel_button.clicked.connect(self.cancel_mitocarta);self.mitocarta_folder_button.clicked.connect(self._open_mitocarta_folder);return card
+
     def refresh(self) -> None:
         state = self.manager.state()
         active = self.manager.active_snapshot()
@@ -261,6 +303,12 @@ class DatabaseManagerPage(QWidget):
         self.resume_button.setEnabled(not running and self.manager.latest_incomplete_snapshot() is not None)
         self.cancel_button.setEnabled(running)
         self._refresh_reactome()
+        self._refresh_mitocarta()
+
+    def _refresh_mitocarta(self) -> None:
+        database=self.manager.mitocarta;active=database.active_snapshot();manifest=database.manifest(active) if active else {};running=bool(self.mitocarta_worker and self.mitocarta_worker.isRunning());state=DatabaseState.DOWNLOADING if running else database.state()
+        self.mitocarta_state_label.setText(f"Status: {state}");self.mitocarta_details.setText(f"Version: {manifest.get('version','3.0')}\nSnapshot: {active.name if active else '—'}\nDownloaded: {self._format_timestamp(manifest.get('download_completed_at')) if active else '—'}\nCore Data: {'Ready' if active else 'Not installed'}\nLocation: {database.root}")
+        self.mitocarta_primary_button.setText("Update" if active else "Download");self.mitocarta_primary_button.setEnabled(not running);self.mitocarta_cancel_button.setEnabled(running);self.mitocarta_error_label.setText(f"Last attempt failed: {self._mitocarta_attempt_error}" if self._mitocarta_attempt_error else "")
 
     def _refresh_reactome(self) -> None:
         database = self.manager.reactome
@@ -357,6 +405,23 @@ class DatabaseManagerPage(QWidget):
         self.reactome_worker.start()
         self._refresh_reactome()
 
+    def _start_mitocarta(self) -> None:
+        if self.mitocarta_worker and self.mitocarta_worker.isRunning():return
+        self._mitocarta_attempt_error="";self.mitocarta_worker=MitoCartaDownloadWorker(self.manager);self.mitocarta_worker.progress.connect(self._show_mitocarta_progress);self.mitocarta_worker.succeeded.connect(self._mitocarta_finished);self.mitocarta_worker.failed.connect(self._mitocarta_failed);self.mitocarta_worker.canceled.connect(self._mitocarta_canceled);self.mitocarta_worker.finished.connect(self.mitocarta_worker.deleteLater);self.mitocarta_worker.start();self._refresh_mitocarta()
+
+    def _show_mitocarta_progress(self,payload:dict)->None:
+        if payload.get("stage")=="processing":self.mitocarta_progress.setRange(0,0);self.mitocarta_progress_text.setText(str(payload.get("filename")));return
+        done,total=int(payload.get("bytes_downloaded",0)),int(payload.get("bytes_total",0))
+        if total:self.mitocarta_progress.setRange(0,total);self.mitocarta_progress.setValue(done);size=f"{self._format_bytes(done)} / {self._format_bytes(total)}"
+        else:self.mitocarta_progress.setRange(0,0);size=self._format_bytes(done) if done else "Size unknown"
+        self.mitocarta_progress_text.setText(f"Downloading MitoCarta3.0\n{payload.get('filename')}\n{size}\nFile {payload.get('file_index')} of {payload.get('file_total')}")
+
+    def _mitocarta_finished(self,_snapshot:str)->None:self.mitocarta_worker=None;self.mitocarta_progress.setRange(0,1);self.mitocarta_progress.setValue(1);self.mitocarta_progress_text.setText("MitoCarta3.0 Core Data is ready.");self.refresh()
+    def _mitocarta_failed(self,message:str)->None:self.mitocarta_worker=None;self._mitocarta_attempt_error=message;self.mitocarta_progress_text.setText("MitoCarta3.0 update failed; the previous snapshot remains active.");self.refresh();QMessageBox.warning(self,"MitoCarta3.0 download failed",message)
+    def _mitocarta_canceled(self,message:str)->None:self.mitocarta_worker=None;self.mitocarta_progress.setRange(0,1);self.mitocarta_progress.setValue(0);self.mitocarta_progress_text.setText(message);self.refresh()
+    def cancel_mitocarta(self)->None:
+        if self.mitocarta_worker:self.mitocarta_progress_text.setText("Cancellation requested. The current download will stop safely.");self.mitocarta_worker.cancel()
+
     def _start_reactome_diagrams(self) -> None:
         if self.reactome_diagram_worker and self.reactome_diagram_worker.isRunning(): return
         self._reactome_attempt_error = ""; self.reactome_diagram_worker = ReactomeDiagramDownloadWorker(self.manager)
@@ -448,6 +513,7 @@ class DatabaseManagerPage(QWidget):
             (self.worker and self.worker.isRunning())
             or (self.reactome_worker and self.reactome_worker.isRunning())
             or (self.reactome_diagram_worker and self.reactome_diagram_worker.isRunning())
+            or (self.mitocarta_worker and self.mitocarta_worker.isRunning())
         )
 
     def _open_folder(self) -> None:
@@ -459,3 +525,7 @@ class DatabaseManagerPage(QWidget):
         self.manager.reactome.root.mkdir(parents=True, exist_ok=True)
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.manager.reactome.root))):
             QMessageBox.warning(self, "Database folder", "Could not open the database folder.")
+
+    def _open_mitocarta_folder(self) -> None:
+        self.manager.mitocarta.root.mkdir(parents=True,exist_ok=True)
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.manager.mitocarta.root))):QMessageBox.warning(self,"Database folder","Could not open the database folder.")

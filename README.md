@@ -137,8 +137,15 @@ for human and mouse. Runs record R, GO.db, and OrgDb versions and preserve long
 annotations, unannotated proteins, per-ontology tables, workbook, plots,
 metadata, and immutable script snapshots under `analyses/GO/`.
 
-This release deliberately does not provide MitoCarta, STRING, differential
+This release deliberately does not provide STRING, differential
 analysis, or other later biological modules.
+
+## MitoCarta3.0 database support
+
+The Database Manager can install the official MitoCarta3.0 database for Homo sapiens as a reusable
+local snapshot. It normalizes the human gene inventory, sub-mitochondrial compartment annotations,
+and MitoPathways membership and hierarchy tables. After installation these database resources are
+available offline. Experimental MitoCarta analysis and enrichment are not included yet.
 
 ## Reactome analysis
 
