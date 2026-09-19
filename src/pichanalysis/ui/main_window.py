@@ -25,6 +25,7 @@ from ..core.go_analysis import export_go, prepare_go_arguments, read_go_outputs
 from ..core.kegg_analysis import prepare_kegg_arguments,read_kegg_outputs
 from ..core.reactome_analysis import ReactomeParameters
 from ..core.mitocarta_analysis import MitoCartaParameters
+from ..core.interpro_pfam_analysis import InterProPfamParameters
 from ..core.presence_analysis import (
     build_presence_arguments, export_presence, read_presence_outputs,
 )
@@ -36,6 +37,7 @@ from .database_manager_page import DatabaseManagerPage
 from .mapping_worker import MappingWorker
 from .reactome_page import ReactomeAnalysisWorker
 from .mitocarta_page import MitoCartaAnalysisWorker
+from .interpro_pfam_page import InterProPfamAnalysisWorker
 from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
 
@@ -58,6 +60,7 @@ class MainWindow(QMainWindow):
         self.kegg_worker: MappingWorker | None = None
         self.reactome_worker: ReactomeAnalysisWorker | None = None
         self.mitocarta_worker: MitoCartaAnalysisWorker | None = None
+        self.interpro_pfam_worker: InterProPfamAnalysisWorker | None = None
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
@@ -108,6 +111,9 @@ class MainWindow(QMainWindow):
         mitocarta=self.analyses_page.mitocarta_page
         mitocarta.run_requested.connect(self._run_mitocarta)
         mitocarta.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
+        interpro=self.analyses_page.interpro_pfam_page
+        interpro.run_requested.connect(self._run_interpro_pfam)
+        interpro.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -122,7 +128,9 @@ class MainWindow(QMainWindow):
                 (self.presence_worker and self.presence_worker.isRunning()) or
                 (self.go_worker and self.go_worker.isRunning()) or (self.kegg_worker and self.kegg_worker.isRunning()) or
                 (self.reactome_worker and self.reactome_worker.isRunning()) or
-                (self.mitocarta_worker and self.mitocarta_worker.isRunning()) or self.database_manager_page.is_running()):
+                (self.mitocarta_worker and self.mitocarta_worker.isRunning()) or
+                (self.interpro_pfam_worker and self.interpro_pfam_worker.isRunning()) or
+                self.analyses_page.interpro_pfam_page.is_running() or self.database_manager_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
                 "Wait for the current analysis or database download before closing PichAnalysis.",
@@ -491,6 +499,20 @@ class MainWindow(QMainWindow):
         box.setText(f"{count} gene-resolved target entity/entities are outside the selected background (target size: {target}; background size: {background}).\n\nMitoCarta enrichment requires the target to be contained within the background. Continue will restrict the target to entities present in the background and record that adjustment in the run.")
         proceed=box.addButton("Continue",QMessageBox.ButtonRole.AcceptRole);box.addButton("Cancel",QMessageBox.ButtonRole.RejectRole);box.exec()
         return box.clickedButton()==proceed
+
+    def _run_interpro_pfam(self,parameters:dict,allow_target_outside_background:bool=False)->None:
+        if not self.project or self.interpro_pfam_worker:return
+        options=InterProPfamParameters(**parameters,allow_target_outside_background=allow_target_outside_background);worker=InterProPfamAnalysisWorker(self.project,self.database_manager_page.manager,self.runtime,new_run_id(),options);self.interpro_pfam_worker=worker;self.analyses_page.interpro_pfam_page.set_running(True)
+        worker.succeeded.connect(self._interpro_pfam_finished);worker.target_outside_background.connect(lambda details,p=parameters:self._interpro_pfam_target_outside(details,p));worker.failed.connect(self._interpro_pfam_failed);worker.finished.connect(worker.deleteLater);worker.start()
+    def _interpro_pfam_finished(self,outputs):
+        self.interpro_pfam_worker=None;self.analyses_page.interpro_pfam_page.set_running(False);self.analyses_page.interpro_pfam_page.show_outputs(outputs)
+        if self.project:self.scripts_page.set_project_scripts(self.project.root/"scripts/runs")
+    def _interpro_pfam_failed(self,message):self.interpro_pfam_worker=None;self.analyses_page.interpro_pfam_page.set_running(False);QMessageBox.warning(self,"InterPro/Pfam analysis failed",message)
+    def _interpro_pfam_target_outside(self,details,parameters):
+        self.interpro_pfam_worker=None;self.analyses_page.interpro_pfam_page.set_running(False)
+        if self._confirm_interpro_pfam_adjustment(details):self._run_interpro_pfam(parameters,True)
+    def _confirm_interpro_pfam_adjustment(self,details):
+        count=len(details.get("entities_outside_background",[]));target=details.get("initial_target_size","unknown");background=details.get("initial_background_size","unknown");box=QMessageBox(self);box.setWindowTitle("Target outside background");box.setText(f"{count} target protein(s) are outside the selected background (target size: {target}; background size: {background}).\n\nEnrichment requires the target to be contained within the background. Continue will authorize the backend to restrict the target and record the decision.");proceed=box.addButton("Continue",QMessageBox.ButtonRole.AcceptRole);box.addButton("Cancel",QMessageBox.ButtonRole.RejectRole);box.exec();return box.clickedButton()==proceed
 
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"

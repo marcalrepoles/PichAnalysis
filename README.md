@@ -154,8 +154,12 @@ operations work offline.
 The scientific backend analyzes unique UniProt accessions against an experimental target and
 background without network access. It produces separate InterPro and Pfam frequency and enrichment
 families, Benjamini-Hochberg correction, repeated-feature and overlap-preserving domain
-architectures, plots, workbooks, immutable runs, and complete provenance. A scientific GUI is not
-included yet.
+architectures, plots, workbooks, immutable runs, and complete provenance.
+
+The Analyses workspace provides the corresponding InterPro/Pfam scientific page. It can explicitly
+build annotation sets, validate coverage, run analyses in the background, navigate proteins,
+features and repeated locations, inspect architectures and historical runs, and export unchanged
+tables, workbooks and plots. Analysis and historical loading remain offline after acquisition.
 
 ## MitoCarta3.0 database support
 

@@ -127,3 +127,17 @@ def run_interpro_pfam_analysis(project,manager,runtime:RRuntime,*,run_id,paramet
 
 def list_interpro_pfam_runs(project):
     root=project.root/"analyses/InterPro_Pfam/runs";return sorted(path.name for path in root.iterdir() if path.is_dir()) if root.is_dir() else []
+
+
+def interpro_pfam_experiment_accessions(project):return _resolved_accessions(_catalog(project))
+def _protein_field(value):return set() if pd.isna(value) else {item.strip() for item in str(value).split(";") if item.strip()}
+def interpro_for_protein(outputs,accession):return outputs.interpro_frequency[outputs.interpro_frequency.Proteins.map(lambda value:str(accession) in _protein_field(value))].copy()
+def pfam_for_protein(outputs,accession):return outputs.pfam_frequency[outputs.pfam_frequency.Proteins.map(lambda value:str(accession) in _protein_field(value))].copy()
+def proteins_for_interpro(outputs,feature):
+    rows=outputs.interpro_frequency[outputs.interpro_frequency.InterPro_ID.astype(str)==str(feature)];values=set().union(*(_protein_field(value) for value in rows.Proteins)) if not rows.empty else set();return pd.DataFrame({"UniProt":sorted(values)})
+def proteins_for_pfam(outputs,feature):
+    rows=outputs.pfam_frequency[outputs.pfam_frequency.Pfam_ID.astype(str)==str(feature)];values=set().union(*(_protein_field(value) for value in rows.Proteins)) if not rows.empty else set();return pd.DataFrame({"UniProt":sorted(values)})
+def interpro_locations_for_protein(outputs,accession):return outputs.interpro_locations[outputs.interpro_locations.uniprot_accession.astype(str)==str(accession)].copy()
+def pfam_locations_for_protein(outputs,accession):return outputs.pfam_locations[outputs.pfam_locations.uniprot_accession.astype(str)==str(accession)].copy()
+def architectures_for_protein(outputs,accession):
+    pfam=outputs.pfam_architecture[outputs.pfam_architecture.UniProt.astype(str)==str(accession)].copy();interpro=outputs.interpro_architecture[outputs.interpro_architecture.UniProt.astype(str)==str(accession)].copy();return pfam,interpro
