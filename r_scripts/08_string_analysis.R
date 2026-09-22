@@ -1,0 +1,41 @@
+args<-commandArgs(trailingOnly=TRUE)
+argument<-function(flag){index<-match(flag,args);if(is.na(index)||index==length(args))stop(paste("Missing",flag));args[index+1]}
+run<-argument("--run");provenance<-argument("--provenance")
+script_arg<-grep("^--file=",commandArgs(),value=TRUE)
+script<-if(length(script_arg))sub("^--file=","",script_arg[1]) else "r_scripts/08_string_analysis.R"
+source(file.path(dirname(script),"lib","string_analysis.R"));string_require()
+library(jsonlite)
+metadata<-jsonlite::fromJSON(file.path(run,"metadata.json"),simplifyVector=FALSE)
+read_table<-function(path)utils::read.csv(file.path(run,path),stringsAsFactors=FALSE,check.names=FALSE)
+write_table<-function(frame,path){dir.create(dirname(file.path(run,path)),recursive=TRUE,showWarnings=FALSE);utils::write.csv(frame,file.path(run,path),row.names=FALSE,na="")}
+nodes<-read_table("networks/expanded_nodes.csv");edges<-read_table("networks/expanded_edges.csv")
+internal_nodes<-read_table("networks/internal_nodes.csv");internal_edges<-read_table("networks/internal_edges.csv")
+seeds<-read_table("networks/seeds.csv");common<-read_table("networks/common_direct_neighbors.csv")
+metrics<-string_node_metrics(nodes,edges);internal_metrics<-string_node_metrics(internal_nodes,internal_edges)
+internal_nodes$network_degree<-internal_metrics$network_degree
+write_table(internal_nodes,"networks/internal_nodes.csv")
+write_table(internal_metrics,"metrics/internal_node_metrics.csv")
+write_table(string_components(internal_metrics),"metrics/internal_components.csv")
+hubs<-metrics[metrics$network_degree>=as.integer(metadata$minimum_hub_degree),,drop=FALSE]
+if(nrow(hubs))hubs<-hubs[order(-hubs$network_degree,-hubs$betweenness,hubs$string_protein_id),,drop=FALSE]
+components<-string_components(metrics);evidence<-string_evidence_summary(edges)
+summary_frame<-string_network_summary(nodes,edges,internal_nodes,internal_edges,metrics,hubs)
+seed_metrics<-string_seed_metrics(seeds,edges,metrics,common)
+write_table(metrics,"metrics/node_metrics.csv");write_table(hubs,"metrics/hubs.csv");write_table(components,"metrics/components.csv")
+write_table(evidence,"metrics/evidence_summary.csv");write_table(summary_frame,"metrics/network_summary.csv");write_table(seed_metrics,"metrics/seed_metrics.csv")
+summary<-data.frame(metric=c("STRING version","Snapshot ID","Network type","Combined score threshold","Threshold preset","Target definition","Seed count","Mapped seeds","Ambiguous entities","Unmapped entities","Max hop","Degree 1 selection mode","Internal nodes","Internal edges","Degree 1 nodes","Degree 2 nodes","Expanded nodes","Expanded edges","Components","Largest component","Isolated seeds","Hubs","Minimum hub degree","Max external node guard","Metrics graph scope"),value=as.character(c(metadata$string_version,metadata$snapshot_id,metadata$network_type,metadata$combined_score_threshold,metadata$threshold_preset,metadata$target_definition,summary_frame$seed_count,summary_frame$mapped_seed_count,length(unique(read_table("mapping/ambiguous.csv")$source_row)),length(unique(read_table("mapping/unmapped.csv")$source_row)),metadata$max_hop,metadata$degree1_selection_mode,summary_frame$internal_node_count,summary_frame$internal_edge_count,summary_frame$degree1_node_count,summary_frame$degree2_node_count,summary_frame$expanded_node_count,summary_frame$expanded_edge_count,summary_frame$connected_component_count,summary_frame$largest_component_size,summary_frame$isolated_seed_count,summary_frame$hub_count,metadata$minimum_hub_degree,metadata$max_external_nodes,metadata$metrics_graph_scope)),stringsAsFactors=FALSE)
+write_table(summary,"summary.csv")
+dir.create(file.path(run,"plots"),showWarnings=FALSE)
+top_n<-as.integer(metadata$top_n)
+string_plot(metrics,"network_degree","string_protein_id","Top network degree",file.path(run,"plots/top_degree"),top_n)
+string_plot(metrics,"betweenness","string_protein_id","Top betweenness",file.path(run,"plots/top_betweenness"),top_n)
+string_plot(components,"component_size","component_id","Component sizes",file.path(run,"plots/component_sizes"),top_n)
+string_distribution_plot(metrics$network_degree,"Network degree distribution",file.path(run,"plots/degree_distribution"))
+string_plot(seed_metrics,"direct_neighbor_count","STRING_ID","Seed direct-neighbor counts",file.path(run,"plots/seed_direct_neighbors"),top_n)
+string_distribution_plot(metrics$seed_support_count[metrics$hop_level>0],"Seed support distribution",file.path(run,"plots/seed_support_distribution"))
+tabs<-list(Summary=summary,`STRING mapping`=read_table("mapping/string_mapping.csv"),Ambiguous=read_table("mapping/ambiguous.csv"),Unmapped=read_table("mapping/unmapped.csv"),Seeds=seeds,`Internal nodes`=internal_nodes,`Internal edges`=internal_edges,`Degree 1 nodes`=read_table("networks/degree1_nodes.csv"),`Degree 2 nodes`=read_table("networks/degree2_nodes.csv"),`Expanded nodes`=nodes,`Expanded edges`=edges,`Common direct neighbors`=common,`Seed support`=read_table("networks/seed_support.csv"),`Node metrics`=metrics,`Seed metrics`=seed_metrics,Hubs=hubs,Components=components,`Edge evidence`=read_table("networks/edge_evidence.csv"),`Evidence summary`=evidence)
+wb<-openxlsx::createWorkbook()
+for(name in names(tabs)){openxlsx::addWorksheet(wb,name);openxlsx::writeData(wb,name,tabs[[name]])}
+openxlsx::saveWorkbook(wb,file.path(run,"STRING_analysis.xlsx"),overwrite=TRUE)
+writeLines(capture.output(sessionInfo()),file.path(provenance,"R_session_info.txt"))
+cat(jsonlite::toJSON(list(run_id=metadata$run_id,summary=summary_frame),auto_unbox=TRUE),"\n")

@@ -216,3 +216,7 @@ The local Pathway Viewer can display installed PNG maps. KGML is required for hi
 ### STRING Homo sapiens local database
 
 The Database Manager can acquire the official Homo sapiens STRING functional association network, physical network, protein metadata, and identifier aliases as an immutable local snapshot. Full evidence channels and raw scores are retained in an indexed SQLite database for reproducible offline mapping and queries. STRING data attribution and license: STRING Consortium, CC BY 4.0. Network analysis and centrality are intentionally reserved for a later module.
+
+### Offline STRING network analysis
+
+STRING analyses use the installed Homo sapiens SQLite snapshot to build experimental subnetworks from uniquely mapped UniProt seeds. Functional association and physical networks are analyzed in separate runs. PichAnalysis offers combined-score threshold presets of 150, 400, and 700, plus a custom 0–1000 value. Optional one-hop and two-hop expansion uses shortest-hop assignment; strict common direct neighbors must connect to every seed above the threshold. R igraph computes component membership, network degree, unweighted betweenness, component-local closeness, clustering, and explicit degree-based hubs on the run subnetwork. Full evidence channels, run-specific snapshot hashes, plots, and a workbook are preserved. Analysis and historical loading require no network access.
