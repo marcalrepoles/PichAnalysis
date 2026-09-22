@@ -137,8 +137,7 @@ for human and mouse. Runs record R, GO.db, and OrgDb versions and preserve long
 annotations, unannotated proteins, per-ontology tables, workbook, plots,
 metadata, and immutable script snapshots under `analyses/GO/`.
 
-This release deliberately does not provide STRING, differential
-analysis, or other later biological modules.
+This release deliberately does not provide differential analysis or later biological modules.
 
 ## InterPro/Pfam annotation support
 
@@ -215,8 +214,10 @@ The local Pathway Viewer can display installed PNG maps. KGML is required for hi
 
 ### STRING Homo sapiens local database
 
-The Database Manager can acquire the official Homo sapiens STRING functional association network, physical network, protein metadata, and identifier aliases as an immutable local snapshot. Full evidence channels and raw scores are retained in an indexed SQLite database for reproducible offline mapping and queries. STRING data attribution and license: STRING Consortium, CC BY 4.0. Network analysis and centrality are intentionally reserved for a later module.
+The Database Manager can acquire the official Homo sapiens STRING functional association network, physical network, protein metadata, and identifier aliases as an immutable local snapshot. Full evidence channels and raw scores are retained in an indexed SQLite database for reproducible offline mapping and queries. STRING data attribution and license: STRING Consortium, CC BY 4.0.
 
 ### Offline STRING network analysis
 
 STRING analyses use the installed Homo sapiens SQLite snapshot to build experimental subnetworks from uniquely mapped UniProt seeds. Functional association and physical networks are analyzed in separate runs. PichAnalysis offers combined-score threshold presets of 150, 400, and 700, plus a custom 0–1000 value. Optional one-hop and two-hop expansion uses shortest-hop assignment; strict common direct neighbors must connect to every seed above the threshold. R igraph computes component membership, network degree, unweighted betweenness, component-local closeness, clustering, and explicit degree-based hubs on the run subnetwork. Full evidence channels, run-specific snapshot hashes, plots, and a workbook are preserved. Analysis and historical loading require no network access.
+
+The Analyses → STRING page provides a local interactive network viewer for functional or physical runs. Researchers can select 150/400/700 confidence presets or a custom score, inspect Degree 1 and Degree 2 expansion, and use union or strict common direct-neighbor selection. Persisted summary, node metrics, hubs, components, support, and per-edge evidence remain available alongside plots. Viewer search, component and hop filters, node dragging, and image export change presentation only; they never recompute scientific results. Historical runs load offline from their own immutable run artifacts, including their original snapshot identity. Full node/edge CSVs, the existing workbook, and plot images can be exported without rerunning the analysis.

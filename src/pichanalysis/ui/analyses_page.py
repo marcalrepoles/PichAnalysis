@@ -19,6 +19,7 @@ from .kegg_page import KEGGPage
 from .reactome_page import ReactomePage
 from .mitocarta_page import MitoCartaPage
 from .interpro_pfam_page import InterProPfamPage
+from .string_page import StringPage
 from ..core.database_manager import DatabaseManager
 
 
@@ -101,6 +102,7 @@ class AnalysesPage(QWidget):
         self.reactome_page = ReactomePage(database_manager or self.kegg_page.manager)
         self.mitocarta_page = MitoCartaPage(database_manager or self.kegg_page.manager)
         self.interpro_pfam_page = InterProPfamPage(database_manager or self.kegg_page.manager)
+        self.string_page = StringPage(database_manager or self.kegg_page.manager)
         module_tabs = QTabWidget()
         module_tabs.addTab(mapping_page, "Identificação e anotação")
         module_tabs.addTab(self.presence_page, "Presence / absence")
@@ -109,6 +111,7 @@ class AnalysesPage(QWidget):
         module_tabs.addTab(self.reactome_page, "Reactome")
         module_tabs.addTab(self.mitocarta_page, "MitoCarta")
         module_tabs.addTab(self.interpro_pfam_page, "InterPro / Pfam")
+        module_tabs.addTab(self.string_page, "STRING")
         outer_layout = QVBoxLayout(self)
         outer_layout.addWidget(module_tabs)
 
@@ -132,6 +135,7 @@ class AnalysesPage(QWidget):
         self.reactome_page.set_project(project)
         self.mitocarta_page.set_project(project)
         self.interpro_pfam_page.set_project(project)
+        self.string_page.set_project(project)
         if project is None:
             self.run_button.setEnabled(False)
             return

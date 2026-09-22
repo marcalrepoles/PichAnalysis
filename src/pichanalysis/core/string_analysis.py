@@ -296,7 +296,7 @@ def read_string_outputs(project, run_id):
     run = _root(project)/"analyses/STRING/runs"/run_id
     missing = [str(run/relative) for relative in TABLES.values() if not (run/relative).is_file()]
     missing += [str(run/name) for name in ("metadata.json","STRING_analysis.xlsx") if not (run/name).is_file()]
-    missing += [str(run/"plots"/f"{name}.{ext}") for name in PLOTS for ext in ("png","pdf") if not (run/"plots"/f"{name}.{ext}").is_file()]
+
     if missing: raise MissingStringOutputError("Missing expected STRING output: "+", ".join(missing))
     return {"run_root":run, "metadata":json.loads((run/"metadata.json").read_text(encoding="utf-8")),
             "tables":{name:pd.read_csv(run/path) for name,path in TABLES.items()},
@@ -325,3 +325,20 @@ def run_string_analysis(project, manager, runtime:RRuntime, *, run_id, parameter
     shutil.copy2(run / "summary.csv", latest / "summary.csv")
     shutil.copy2(run / "STRING_analysis.xlsx", latest / "STRING_analysis.xlsx")
     return outputs
+
+
+def string_node_neighbors(outputs, string_id):
+    """Filter persisted run edges only; no SQLite or network access."""
+    edges = outputs["tables"]["expanded_edges"]
+    return edges[(edges.protein_a.astype(str)==str(string_id)) | (edges.protein_b.astype(str)==str(string_id))].copy()
+
+
+def string_node_support(outputs, string_id):
+    support = outputs["tables"]["seed_support"]
+    return support[support.string_protein_id.astype(str)==str(string_id)].copy()
+
+
+def string_edge_details(outputs, protein_a, protein_b):
+    edges = outputs["tables"]["edge_evidence"]
+    mask = ((edges.protein_a.astype(str)==str(protein_a)) & (edges.protein_b.astype(str)==str(protein_b))) | ((edges.protein_a.astype(str)==str(protein_b)) & (edges.protein_b.astype(str)==str(protein_a)))
+    return edges[mask].copy()

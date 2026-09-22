@@ -26,6 +26,7 @@ from ..core.kegg_analysis import prepare_kegg_arguments,read_kegg_outputs
 from ..core.reactome_analysis import ReactomeParameters
 from ..core.mitocarta_analysis import MitoCartaParameters
 from ..core.interpro_pfam_analysis import InterProPfamParameters
+from ..core.string_analysis import StringParameters
 from ..core.presence_analysis import (
     build_presence_arguments, export_presence, read_presence_outputs,
 )
@@ -38,6 +39,7 @@ from .mapping_worker import MappingWorker
 from .reactome_page import ReactomeAnalysisWorker
 from .mitocarta_page import MitoCartaAnalysisWorker
 from .interpro_pfam_page import InterProPfamAnalysisWorker
+from .string_page import StringAnalysisWorker
 from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
 
@@ -61,6 +63,8 @@ class MainWindow(QMainWindow):
         self.reactome_worker: ReactomeAnalysisWorker | None = None
         self.mitocarta_worker: MitoCartaAnalysisWorker | None = None
         self.interpro_pfam_worker: InterProPfamAnalysisWorker | None = None
+        self.string_worker: StringAnalysisWorker | None = None
+        self._string_threads: list[StringAnalysisWorker] = []
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
@@ -114,6 +118,9 @@ class MainWindow(QMainWindow):
         interpro=self.analyses_page.interpro_pfam_page
         interpro.run_requested.connect(self._run_interpro_pfam)
         interpro.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
+        string_page=self.analyses_page.string_page
+        string_page.run_requested.connect(self._run_string)
+        string_page.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -130,6 +137,8 @@ class MainWindow(QMainWindow):
                 (self.reactome_worker and self.reactome_worker.isRunning()) or
                 (self.mitocarta_worker and self.mitocarta_worker.isRunning()) or
                 (self.interpro_pfam_worker and self.interpro_pfam_worker.isRunning()) or
+                (self.string_worker and self.string_worker.isRunning()) or
+                bool(self._string_threads) or
                 self.analyses_page.interpro_pfam_page.is_running() or self.database_manager_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
@@ -514,6 +523,60 @@ class MainWindow(QMainWindow):
     def _confirm_interpro_pfam_adjustment(self,details):
         count=len(details.get("entities_outside_background",[]));target=details.get("initial_target_size","unknown");background=details.get("initial_background_size","unknown");box=QMessageBox(self);box.setWindowTitle("Target outside background");box.setText(f"{count} target protein(s) are outside the selected background (target size: {target}; background size: {background}).\n\nEnrichment requires the target to be contained within the background. Continue will authorize the backend to restrict the target and record the decision.");proceed=box.addButton("Continue",QMessageBox.ButtonRole.AcceptRole);box.addButton("Cancel",QMessageBox.ButtonRole.RejectRole);box.exec();return box.clickedButton()==proceed
 
+    def _run_string(self, parameters: dict, allow_target_outside_background: bool = False) -> None:
+        if not self.project or self.string_worker:
+            return
+        try:
+            options = StringParameters(**parameters, allow_target_outside_background=allow_target_outside_background)
+        except (TypeError, ValueError) as error:
+            QMessageBox.warning(self, "STRING analysis", str(error))
+            return
+        worker = StringAnalysisWorker(self.project, self.database_manager_page.manager, self.runtime, new_run_id(), options)
+        self.string_worker = worker
+        self._string_threads.append(worker)
+        self.analyses_page.string_page.set_running(True)
+        worker.succeeded.connect(self._string_finished)
+        worker.failed.connect(self._string_failed)
+        worker.expansion_limit.connect(self._string_expansion_limit)
+        worker.target_outside.connect(lambda details, p=parameters: self._string_target_outside(details, p))
+        worker.finished.connect(lambda w=worker: self._string_threads.remove(w))
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _string_finished(self, outputs) -> None:
+        self.string_worker = None
+        self.analyses_page.string_page.set_running(False)
+        self.analyses_page.string_page.show_outputs(outputs)
+        if self.project:
+            self.scripts_page.set_project_scripts(self.project.root / "scripts" / "runs")
+
+    def _string_failed(self, message: str) -> None:
+        self.string_worker = None
+        self.analyses_page.string_page.set_running(False)
+        QMessageBox.warning(self, "STRING analysis failed", message)
+
+    def _string_expansion_limit(self, details: dict) -> None:
+        self.string_worker = None
+        self.analyses_page.string_page.set_running(False)
+        QMessageBox.warning(self, "STRING expansion safety limit",
+            f"The network reaches {details.get('observed')} external proteins at hop {details.get('hop')}, "
+            f"above the configured limit of {details.get('limit')} (score ≥ {details.get('threshold')}, "
+            f"{details.get('network_type')} network). Raise the confidence threshold, reduce the maximum hop "
+            "or narrow the seed set, then run again. No network was silently truncated.")
+
+    def _string_target_outside(self, details: dict, parameters: dict) -> None:
+        self.string_worker = None
+        self.analyses_page.string_page.set_running(False)
+        box = QMessageBox(self)
+        box.setWindowTitle("STRING target outside background")
+        box.setText(f"{len(details.get('entities_outside_background', []))} target proteins are outside the selected "
+            f"background (target {details.get('target_size')}; background {details.get('background_size')}). "
+            "Continue will authorize the backend to restrict the target and record the adjustment.")
+        proceed = box.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() == proceed:
+            self._run_string(parameters, True)
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"
         output_dir = self.project.root / "logs" if self.project else Path(tempfile.gettempdir())
