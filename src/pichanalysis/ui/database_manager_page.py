@@ -7,7 +7,7 @@ from PySide6.QtCore import QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QGroupBox, QHBoxLayout,
-    QLabel, QMessageBox, QProgressBar, QPushButton, QVBoxLayout, QWidget,
+    QLabel, QMessageBox, QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from ..core.database_manager import DatabaseManager
@@ -17,6 +17,7 @@ from ..core.databases.reactome import CORE_FILES, DIAGRAM_ARCHIVE, ReactomeDownl
 from ..core.databases.mitocarta import FILES as MITOCARTA_FILES, MitoCartaDownloadCancelled, MitoCartaProvider
 from ..core.interpro_database import InterProCancelled, InterProProvider
 from .string_database_card import StringDatabaseCard, StringDownloadWorker
+from .complex_portal_database_card import ComplexPortalDatabaseCard
 
 ACADEMIC_NOTICE = (
     "The KEGG REST API is provided for academic use by academic users. "
@@ -241,13 +242,21 @@ class DatabaseManagerPage(QWidget):
         self._interpro_attempt_error = ""
 
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
         layout.addWidget(self._build_kegg_card())
         layout.addWidget(self._build_reactome_card())
         layout.addWidget(self._build_mitocarta_card())
         layout.addWidget(self._build_interpro_card())
         self.string_card = StringDatabaseCard(self.manager)
         layout.addWidget(self.string_card)
+        self.complex_portal_card = ComplexPortalDatabaseCard(self.manager)
+        layout.addWidget(self.complex_portal_card)
         layout.addStretch()
         self.refresh()
 
@@ -345,6 +354,7 @@ class DatabaseManagerPage(QWidget):
         self._refresh_mitocarta()
         self._refresh_interpro()
         self.string_card.refresh()
+        self.complex_portal_card.refresh()
 
     def _refresh_interpro(self):
         database=self.manager.interpro;manifest=database.metadata_manifest();running=bool(self.interpro_worker and self.interpro_worker.isRunning());state=DatabaseState.DOWNLOADING if running else database.state()
@@ -571,6 +581,7 @@ class DatabaseManagerPage(QWidget):
             or (self.mitocarta_worker and self.mitocarta_worker.isRunning())
             or (self.interpro_worker and self.interpro_worker.isRunning())
             or self.string_card.is_running()
+            or self.complex_portal_card.is_running()
         )
 
     def _open_folder(self) -> None:

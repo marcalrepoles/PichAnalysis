@@ -21,6 +21,7 @@ from .reactome_database import ReactomeDatabase
 from .mitocarta_database import MitoCartaDatabase
 from .interpro_database import InterProDatabase
 from .string_database import StringDatabase
+from .complex_portal_database import ComplexPortalDatabase
 
 PATHWAY_ANALYSIS_TABLES=("ncbi_geneid_to_kegg.tsv","kegg_to_ncbi_geneid.tsv","uniprot_to_kegg.tsv","kegg_to_uniprot.tsv")
 
@@ -42,6 +43,7 @@ class DatabaseManager:
         self.mitocarta = MitoCartaDatabase(self.root)
         self.interpro = InterProDatabase(self.root)
         self.string = StringDatabase(self.root)
+        self.complex_portal = ComplexPortalDatabase(self.root)
         self._cancel = threading.Event()
         self.logger = logging.getLogger("pichanalysis.database_manager")
         if not self.logger.handlers:
