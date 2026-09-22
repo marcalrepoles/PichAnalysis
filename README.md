@@ -212,3 +212,7 @@ The analysis runs entirely offline in R. Stable NCBI Gene IDs are mapped first, 
 Pathway frequency is descriptive and reports how many selected genes occur in each pathway. Pathway enrichment is a separate hypergeometric analysis against an explicit experimental background, with Benjamini-Hochberg FDR correction. The default background is the KEGG-mapped portion of the experiment, not the complete human genome.
 
 The local Pathway Viewer can display installed PNG maps. KGML is required for highlighting target genes because the R analysis uses KGML membership and coordinates to identify hit nodes; Python only renders those calculated coordinates. Missing images or KGML do not prevent frequency and enrichment analysis.
+
+### STRING Homo sapiens local database
+
+The Database Manager can acquire the official Homo sapiens STRING functional association network, physical network, protein metadata, and identifier aliases as an immutable local snapshot. Full evidence channels and raw scores are retained in an indexed SQLite database for reproducible offline mapping and queries. STRING data attribution and license: STRING Consortium, CC BY 4.0. Network analysis and centrality are intentionally reserved for a later module.

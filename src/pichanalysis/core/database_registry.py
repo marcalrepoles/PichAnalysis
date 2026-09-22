@@ -34,5 +34,6 @@ KEGG_HSA = DatabaseSpec(
 )
 REACTOME_HUMAN=DatabaseSpec("reactome","Reactome — Homo sapiens","Homo sapiens","R-HSA-","9606",("core","diagrams"))
 MITOCARTA_HUMAN=DatabaseSpec("mitocarta","MitoCarta3.0 — Homo sapiens","Homo sapiens","human","9606",("core",))
+STRING_HUMAN=DatabaseSpec("string","STRING — Homo sapiens","Homo sapiens","human","9606",("functional","physical","proteins","aliases"))
 
-DATABASE_REGISTRY = {KEGG_HSA.database_id: KEGG_HSA,REACTOME_HUMAN.database_id:REACTOME_HUMAN,MITOCARTA_HUMAN.database_id:MITOCARTA_HUMAN}
+DATABASE_REGISTRY = {KEGG_HSA.database_id: KEGG_HSA,REACTOME_HUMAN.database_id:REACTOME_HUMAN,MITOCARTA_HUMAN.database_id:MITOCARTA_HUMAN,STRING_HUMAN.database_id:STRING_HUMAN}

@@ -16,6 +16,7 @@ from ..core.databases.kegg import KEGG_USAGE_URL
 from ..core.databases.reactome import CORE_FILES, DIAGRAM_ARCHIVE, ReactomeDownloadCancelled, ReactomeProvider
 from ..core.databases.mitocarta import FILES as MITOCARTA_FILES, MitoCartaDownloadCancelled, MitoCartaProvider
 from ..core.interpro_database import InterProCancelled, InterProProvider
+from .string_database_card import StringDatabaseCard, StringDownloadWorker
 
 ACADEMIC_NOTICE = (
     "The KEGG REST API is provided for academic use by academic users. "
@@ -239,11 +240,14 @@ class DatabaseManagerPage(QWidget):
         self.interpro_worker: InterProMetadataWorker | None = None
         self._interpro_attempt_error = ""
 
+
         layout = QVBoxLayout(self)
         layout.addWidget(self._build_kegg_card())
         layout.addWidget(self._build_reactome_card())
         layout.addWidget(self._build_mitocarta_card())
         layout.addWidget(self._build_interpro_card())
+        self.string_card = StringDatabaseCard(self.manager)
+        layout.addWidget(self.string_card)
         layout.addStretch()
         self.refresh()
 
@@ -340,6 +344,7 @@ class DatabaseManagerPage(QWidget):
         self._refresh_reactome()
         self._refresh_mitocarta()
         self._refresh_interpro()
+        self.string_card.refresh()
 
     def _refresh_interpro(self):
         database=self.manager.interpro;manifest=database.metadata_manifest();running=bool(self.interpro_worker and self.interpro_worker.isRunning());state=DatabaseState.DOWNLOADING if running else database.state()
@@ -565,6 +570,7 @@ class DatabaseManagerPage(QWidget):
             or (self.reactome_diagram_worker and self.reactome_diagram_worker.isRunning())
             or (self.mitocarta_worker and self.mitocarta_worker.isRunning())
             or (self.interpro_worker and self.interpro_worker.isRunning())
+            or self.string_card.is_running()
         )
 
     def _open_folder(self) -> None:
