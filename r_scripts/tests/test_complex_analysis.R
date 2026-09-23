@@ -1,0 +1,62 @@
+source("r_scripts/lib/complex_analysis.R")
+stopifnot(requireNamespace("openxlsx",quietly=TRUE))
+complexes <- data.frame(complex_id=c("CPX-1","CPX-2","CPX-3"),recommended_name=c("Alternative","Simple","No protein"),confidence_accession="ECO:0000353",confidence_name="manual",source="IntAct")
+expanded <- data.frame(complex_id=c("CPX-1","CPX-1","CPX-1","CPX-2","CPX-2"),
+  uniprot_accession=c("P1","","P5","P1","P2"),
+  participant_accession_raw=c("P1","[P2,P3,P4]","P5","P1","P2"),
+  participant_type=c("protein","protein_set","protein","protein","protein"),
+  stoichiometry_raw=c("4","0","1","1","2"),stoichiometry_known=c("1","0","1","1","1"),
+  occurrence_index=c("1","2","3","1","2"),stringsAsFactors=FALSE)
+direct <- data.frame(complex_id=c("CPX-1","CPX-1","CPX-1","CPX-2","CPX-3"),stoichiometry_known=c("1","0","1","1","1"),stringsAsFactors=FALSE)
+nonprotein <- data.frame(complex_id=c("CPX-1","CPX-1","CPX-3"),participant_type=c("RNA","chemical","chemical"),stringsAsFactors=FALSE)
+nested <- data.frame(parent_complex_id="CPX-1",child_complex_id="CPX-2",stringsAsFactors=FALSE)
+groups <- complex_groups(expanded,complexes,c("P1","P3","P5"))
+stopifnot(nrow(groups)==5,groups$component_group_id[1]=="CG001",groups$component_group_id[2]=="CG002")
+stopifnot(groups$option_count[2]==3,groups$group_covered[2],groups$detected_uniprot_accessions[2]=="P3")
+coverage <- complex_coverage(complexes,groups,c("P1","P3","P5"),nonprotein,nested,direct)
+stopifnot(coverage$covered_component_groups[1]==3,coverage$total_protein_component_groups[1]==3)
+stopifnot(coverage$coverage_class[1]=="complete_protein_component_coverage",coverage$protein_component_coverage[1]==1)
+stopifnot(coverage$has_nonprotein_participants[1],coverage$has_nested_complexes[1],coverage$has_unknown_stoichiometry[1])
+stopifnot(coverage$total_protein_component_groups[3]==0,is.na(coverage$protein_component_coverage[3]))
+stopifnot(coverage$coverage_class[3]=="not_applicable_no_protein_components")
+multiple <- complex_groups(expanded,complexes,c("P1","P2","P3","P5"))
+multiple_coverage <- complex_coverage(complexes,multiple,c("P1","P2","P3","P5"),nonprotein,nested,direct)
+stopifnot(multiple_coverage$covered_component_groups[1]==3)
+freq <- complex_frequency(multiple_coverage,c("P1","P2","P3","P5"))
+stopifnot(freq$target_member_count[1]==4,freq$protein_component_group_count[1]==3)
+partial <- complex_coverage(complexes,complex_groups(expanded,complexes,c("P1","P2")),c("P1","P2"),nonprotein,nested,direct)
+stopifnot(partial$covered_component_groups[1]==2,partial$total_protein_component_groups[1]==3,partial$protein_component_coverage[1]==2/3)
+stopifnot(partial$coverage_class[1]=="partial_protein_component_coverage")
+zero <- complex_coverage(complexes,complex_groups(expanded,complexes,c("X","Y")),c("X","Y"),nonprotein,nested,direct)
+stopifnot(zero$covered_component_groups[1]==0,zero$coverage_class[1]=="no_detected_protein_components")
+# One-sided Fisher greater: 3 target hits, 1 reference hit, 5 target and 5 reference proteins.
+small <- coverage[1,,drop=FALSE];small$expected_possible_proteins <- "P1;P2;P3;P4"
+e <- complex_enrichment(small,c("P1","P2","P3","T1","T2"),c("P1","P2","P3","P4","T1","T2","R1","R2","R3","R4"),minimum_overlap=3)
+expected <- stats::fisher.test(matrix(c(3,2,1,4),nrow=2,byrow=TRUE),alternative="greater")$p.value
+stopifnot(isTRUE(all.equal(e$all$p_value,expected,tolerance=1e-12)),e$all$Reference_count==1,e$all$Reference_size==5)
+many <- rbind(small,small,small);many$complex_id <- c("CPX-10","CPX-11","CPX-12");many$expected_possible_proteins <- c("P1;P2;P3;P4","P1;P2;R1","P1")
+bh <- complex_enrichment(many,c("P1","P2","P3","T1","T2"),c("P1","P2","P3","P4","T1","T2","R1","R2","R3","R4"),minimum_overlap=1)
+raw_p <- bh$all$p_value[match(many$complex_id,bh$all$complex_id)]
+adjusted <- stats::p.adjust(raw_p,method="BH")
+stopifnot(isTRUE(all.equal(bh$all$FDR[match(many$complex_id,bh$all$complex_id)],adjusted,tolerance=1e-12)))
+below <- complex_enrichment(small,c("P1","P2","P3","T1","T2"),c("P1","P2","P3","P4","T1","T2","R1","R2","R3","R4"),minimum_overlap=4)
+stopifnot(nrow(below$all)==0,below$excluded$reason=="below_minimum_overlap")
+none <- complex_enrichment(coverage,c("X","Y"),c("X","Y","R1"),minimum_overlap=3)
+stopifnot(nrow(none$all)==0,nrow(none$significant)==0,any(none$excluded$reason=="no_protein_components"))
+non_sig <- complex_enrichment(small,c("P1","P2","P3","T1","T2"),c("P1","P2","P3","P4","T1","T2","R1","R2","R3","R4"),minimum_overlap=1,fdr_cutoff=0)
+stopifnot(nrow(non_sig$significant)==0)
+nav <- complex_navigation(groups,coverage,data.frame(canonical_uniprot="P1",gene_symbol="GENE1"),c("P1","P3","P5"))
+stopifnot(any(nav$protein_to_complexes$alternative_group),any(nav$complex_to_proteins$detected_target_protein))
+plot_dir <- tempfile("complex-plots-");dir.create(plot_dir)
+complex_plots(plot_dir,coverage,freq,e,top_n=5)
+stopifnot(length(list.files(file.path(plot_dir,"plots"),pattern="\\.png$"))==6,length(list.files(file.path(plot_dir,"plots"),pattern="\\.pdf$"))==6)
+wb <- openxlsx::createWorkbook();openxlsx::addWorksheet(wb,"Coverage");openxlsx::writeData(wb,"Coverage",coverage);path<-file.path(plot_dir,"test.xlsx");openxlsx::saveWorkbook(wb,path)
+stopifnot(file.exists(path))
+official_isoform <- data.frame(participant_type="other/unknown", participant_accession_raw="O60706-2", uniprot_accession="")
+official_chain <- data.frame(participant_type="other/unknown", participant_accession_raw="P15309-PRO_0000023963", uniprot_accession="")
+stopifnot(identical(complex_options(official_isoform), "O60706"))
+stopifnot(identical(complex_options(official_chain), "P15309"))
+bad_source <- official_chain
+bad_source$participant_accession_raw <- "unexpected-component"
+stopifnot(inherits(try(complex_options(bad_source), silent=TRUE), "try-error"))
+cat("R Complex Portal tests passed: coverage, alternatives, stoichiometry, non-protein, nested, frequency, Fisher, BH, exclusions, plots, workbook\n")
