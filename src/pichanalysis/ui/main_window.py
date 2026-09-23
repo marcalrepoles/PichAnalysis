@@ -27,6 +27,7 @@ from ..core.reactome_analysis import ReactomeParameters
 from ..core.mitocarta_analysis import MitoCartaParameters
 from ..core.interpro_pfam_analysis import InterProPfamParameters
 from ..core.string_analysis import StringParameters
+from ..core.complex_analysis import ComplexParameters
 from ..core.presence_analysis import (
     build_presence_arguments, export_presence, read_presence_outputs,
 )
@@ -40,6 +41,7 @@ from .reactome_page import ReactomeAnalysisWorker
 from .mitocarta_page import MitoCartaAnalysisWorker
 from .interpro_pfam_page import InterProPfamAnalysisWorker
 from .string_page import StringAnalysisWorker
+from .complexes_page import ComplexAnalysisWorker
 from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
 
@@ -65,6 +67,8 @@ class MainWindow(QMainWindow):
         self.interpro_pfam_worker: InterProPfamAnalysisWorker | None = None
         self.string_worker: StringAnalysisWorker | None = None
         self._string_threads: list[StringAnalysisWorker] = []
+        self.complex_worker: ComplexAnalysisWorker | None = None
+        self._complex_threads: list[ComplexAnalysisWorker] = []
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
@@ -121,6 +125,9 @@ class MainWindow(QMainWindow):
         string_page=self.analyses_page.string_page
         string_page.run_requested.connect(self._run_string)
         string_page.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
+        complex_page=self.analyses_page.complex_page
+        complex_page.run_requested.connect(self._run_complex)
+        complex_page.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -139,6 +146,8 @@ class MainWindow(QMainWindow):
                 (self.interpro_pfam_worker and self.interpro_pfam_worker.isRunning()) or
                 (self.string_worker and self.string_worker.isRunning()) or
                 bool(self._string_threads) or
+                (self.complex_worker and self.complex_worker.isRunning()) or
+                bool(self._complex_threads) or
                 self.analyses_page.interpro_pfam_page.is_running() or self.database_manager_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
@@ -577,6 +586,50 @@ class MainWindow(QMainWindow):
         box.exec()
         if box.clickedButton() == proceed:
             self._run_string(parameters, True)
+    def _run_complex(self, parameters: dict, allow_target_outside_background: bool = False) -> None:
+        if not self.project or self.complex_worker:
+            return
+        try:
+            options = ComplexParameters(**parameters, allow_target_outside_background=allow_target_outside_background)
+        except (TypeError, ValueError) as error:
+            QMessageBox.warning(self, "Complex analysis", str(error))
+            return
+        worker = ComplexAnalysisWorker(self.project, self.database_manager_page.manager, self.runtime, new_run_id(), options)
+        self.complex_worker = worker
+        self._complex_threads.append(worker)
+        self.analyses_page.complex_page.set_running(True)
+        worker.succeeded.connect(self._complex_finished)
+        worker.failed.connect(self._complex_failed)
+        worker.target_outside.connect(lambda details, p=parameters: self._complex_target_outside(details, p))
+        worker.finished.connect(lambda w=worker: self._complex_threads.remove(w))
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _complex_finished(self, outputs) -> None:
+        self.complex_worker = None
+        self.analyses_page.complex_page.set_running(False)
+        self.analyses_page.complex_page.show_outputs(outputs)
+        if self.project:
+            self.scripts_page.set_project_scripts(self.project.root / "scripts" / "runs")
+
+    def _complex_failed(self, message: str) -> None:
+        self.complex_worker = None
+        self.analyses_page.complex_page.set_running(False)
+        QMessageBox.warning(self, "Complex analysis failed", message)
+
+    def _complex_target_outside(self, details: dict, parameters: dict) -> None:
+        self.complex_worker = None
+        self.analyses_page.complex_page.set_running(False)
+        box = QMessageBox(self)
+        box.setWindowTitle("Complex target outside background")
+        box.setText(f"{len(details.get('entities_outside_background', []))} target proteins are outside the selected "
+            f"background (target size: {details.get('initial_target_size')}; background size: "
+            f"{details.get('initial_background_size')}). Continue authorizes the backend to restrict the target.")
+        proceed = box.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() == proceed:
+            self._run_complex(parameters, True)
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"
         output_dir = self.project.root / "logs" if self.project else Path(tempfile.gettempdir())

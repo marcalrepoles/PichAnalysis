@@ -212,17 +212,16 @@ def read_complex_outputs(project, run_id):
     run = Path(project.root) / "analyses/Complexes/runs" / run_id
     mandatory = {name: run / relative for name, relative in TABLES.items()}
     mandatory["metadata"] = run / "metadata.json"
-    mandatory["workbook"] = run / "Complex_analysis.xlsx"
-    for stem in PLOTS:
-        for extension in ("png", "pdf"):
-            mandatory[f"plot:{stem}.{extension}"] = run / "plots" / f"{stem}.{extension}"
+    # Tables and metadata define a valid historical run. Optional presentation
+    # artifacts may be absent, but must never be borrowed from another run.
     missing = [str(path) for path in mandatory.values() if not path.is_file()]
     if missing:
         raise MissingComplexOutputError("Missing expected Complex Portal output: " + ", ".join(missing))
     try:
         return {"run_root": run, "metadata": json.loads(mandatory["metadata"].read_text(encoding="utf-8")),
             "tables": {name: pd.read_csv(path) for name, path in mandatory.items() if name in TABLES},
-            "workbook": mandatory["workbook"], "plots": tuple(sorted((run / "plots").glob("*.*")))}
+            "workbook": (run / "Complex_analysis.xlsx") if (run / "Complex_analysis.xlsx").is_file() else None,
+            "plots": tuple(sorted((run / "plots").glob("*.*")))}
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         raise MissingComplexOutputError(f"Invalid Complex Portal run: {error}") from error
 
