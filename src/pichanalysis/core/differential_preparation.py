@@ -207,6 +207,12 @@ def _freeze_matrix(project, samples, transformation, zero_missing):
     identifiers = source[primary].astype(str) if primary in source else pd.Series([""] * len(source))
     features = pd.DataFrame({"feature_id": matrix.feature_id, "source_row": range(1, len(source) + 1),
         "display_identifier": identifiers, "original_identifier": identifiers})
+    for identifier_type, output_name in (("gene_symbol", "gene_symbol"),
+                                         ("uniprot", "uniprot_accession")):
+        configured = next((name for name, config in project.config.get("columns", {}).items()
+            if name in source and config.get("role") == "identifier"
+            and config.get("identifier_type") == identifier_type), None)
+        features[output_name] = source[configured].astype(str) if configured else ""
     return matrix, features, value_counts
 
 
@@ -264,9 +270,6 @@ def load_run(project, run_id):
     for name in ("original_quantitative_matrix.csv", "sample_metadata.csv", "feature_metadata.csv", "parameters.json"):
         required[f"input_{name}"] = run / "input" / name
     required["workbook"] = run / "Differential_preparation.xlsx"
-    for plot in PLOTS:
-        for suffix in (".png", ".pdf"):
-            required[f"plot_{plot}{suffix}"] = run / "plots" / f"{plot}{suffix}"
     absent = [str(path) for path in required.values() if not path.is_file()]
     if absent:
         raise MissingPreparationOutputError("Required preparation artifacts are missing.", {"paths": absent})

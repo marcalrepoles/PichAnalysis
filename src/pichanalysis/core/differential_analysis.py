@@ -249,17 +249,7 @@ def load_run(project, run_id):
         "feature_eligibility.csv", "qualitative_detection_candidates.csv", "parameters.json"):
         required[f"input_{name}"] = run / "input" / name
     required["workbook"] = run / "Differential_analysis.xlsx"
-    for plot in PLOTS:
-        for suffix in (".png", ".pdf"):
-            required[f"plot_{plot}{suffix}"] = run / "plots" / f"{plot}{suffix}"
-    parameters_path = run / "input/parameters.json"
-    if parameters_path.is_file():
-        try:
-            if json.loads(parameters_path.read_text(encoding="utf-8")).get("preparation_imputation") != "none":
-                for suffix in (".png", ".pdf"):
-                    required[f"plot_imputation_diagnostic{suffix}"] = run / "plots" / f"imputation_diagnostic{suffix}"
-        except (OSError, ValueError) as error:
-            raise MissingDifferentialOutputError("Invalid run parameters.") from error
+
     absent = [str(path) for path in required.values() if not path.is_file()]
     if absent:
         raise MissingDifferentialOutputError("Differential run is missing required artifacts.", {"paths": absent})
