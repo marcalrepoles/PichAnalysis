@@ -296,6 +296,13 @@ def run_differential_preparation(project, runtime: RRuntime, *, run_id,
         if "IMPUTATION_PACKAGE_UNAVAILABLE" in message:
             raise ImputationPackageUnavailableError(message)
         raise PreparationRExecutionError(message)
+    output_paths = {"prepared_matrix.csv": run / "matrices/prepared_matrix.csv",
+        "contrast_metadata.csv": run / "design/contrast_metadata.csv",
+        "feature_eligibility.csv": run / "eligibility/feature_eligibility.csv",
+        "qualitative_detection_candidates.csv": run / "eligibility/qualitative_detection_candidates.csv"}
+    output_hashes = {name: _sha(path) for name, path in output_paths.items()}
+    for destination in (run / "input/output_hashes.json", provenance / "output_hashes.json"):
+        destination.write_text(json.dumps(output_hashes, indent=2), encoding="utf-8")
     outputs = load_run(project, run_id)
     latest = Path(project.root) / "analyses/Differential/Preparation"
     shutil.copy2(run / "summary.csv", latest / "summary.csv")
