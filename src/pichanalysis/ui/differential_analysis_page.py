@@ -59,6 +59,8 @@ class DifferentialWorker(QThread):
 
 
 class DifferentialAnalysisPage(QWidget):
+    explore_requested = Signal(str, str, str)
+
     def __init__(self, runtime=None):
         super().__init__()
         self.runtime = runtime or RRuntime()
@@ -288,6 +290,9 @@ class DifferentialAnalysisPage(QWidget):
             ("Open Differential Analysis results folder", self._open_results),
             ("Open Preparation run folder", self._open_preparation)):
             button = QPushButton(label); button.clicked.connect(method); actions.addWidget(button)
+        self.explore_button = QPushButton("Explore across analyses...")
+        self.explore_button.clicked.connect(self._explore_selected)
+        actions.addWidget(self.explore_button)
         layout.addLayout(actions)
         self.stage_tabs.addTab(page, "Results & history")
 
@@ -715,6 +720,11 @@ class DifferentialAnalysisPage(QWidget):
             selected = selected.assign(**{f"audit_{name}": value})
         selected.to_csv(path, index=False)
 
+    def _explore_selected(self):
+        if not self.statistics or not self.results_table.selectedItems():
+            return
+        feature_id = self.results_table.selectedItems()[0].data(Qt.ItemDataRole.UserRole)
+        self.explore_requested.emit("differential", self.statistics["metadata"]["run_id"], feature_id)
     def _open_results(self):
         if self.statistics: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.statistics["run_root"])))
 

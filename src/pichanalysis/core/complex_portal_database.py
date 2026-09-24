@@ -13,6 +13,7 @@ import re
 import shutil
 import sqlite3
 from datetime import datetime, timezone
+from tempfile import mkdtemp
 from pathlib import Path
 
 from .database_registry import DatabaseState
@@ -121,9 +122,10 @@ class ComplexPortalDatabase:
         self.provider = provider or ComplexPortalProvider()
 
     def create_staging_snapshot(self):
-        snapshot_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        snapshot = self.snapshots / snapshot_id
-        (snapshot / "raw").mkdir(parents=True)
+        self.snapshots.mkdir(parents=True, exist_ok=True)
+        snapshot = Path(mkdtemp(prefix=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ_"), dir=self.snapshots))
+        snapshot_id = snapshot.name
+        (snapshot / "raw").mkdir()
         (snapshot / "tables").mkdir()
         self._write(snapshot, {
             "database": "Complex Portal", "organism": "Homo sapiens", "tax_id": "9606",

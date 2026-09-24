@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 from datetime import datetime, timezone
+from tempfile import mkdtemp
 from pathlib import Path
 
 import pandas as pd
@@ -95,8 +96,10 @@ class MitoCartaDatabase:
         self.root = Path(root) / "mitocarta" / "human"; self.snapshots = self.root / "snapshots"; self.active_pointer = self.root / "active_snapshot.json"
 
     def create_staging_snapshot(self) -> Path:
-        sid = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"); snap = self.snapshots / sid
-        (snap / "raw").mkdir(parents=True); (snap / "tables").mkdir()
+        self.snapshots.mkdir(parents=True, exist_ok=True)
+        snap = Path(mkdtemp(prefix=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ_"), dir=self.snapshots))
+        sid = snap.name
+        (snap / "raw").mkdir(); (snap / "tables").mkdir()
         self._write_manifest(snap, {"database":"MitoCarta", "version":VERSION, "organism_name":"Homo sapiens", "tax_id":"9606", "snapshot_id":sid, "status":DatabaseState.INCOMPLETE, "download_started_at":_now(), "download_completed_at":None, "retrieved_at":None, "source":BASE_URL, "files":[]})
         return snap
 

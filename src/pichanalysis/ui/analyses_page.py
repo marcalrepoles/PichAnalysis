@@ -24,6 +24,10 @@ from .complexes_page import ComplexPage
 from .mtdna_page import MtdnaPage
 from .proteomics_qc_page import ProteomicsQCPage
 from .differential_analysis_page import DifferentialAnalysisPage
+from .cross_module_explorer import CrossModuleExplorer
+from .cross_module_actions import attach_explore_action
+from .cross_module_navigation import open_persisted_target
+from ..core.cross_module_integration import default_registry
 from ..core.database_manager import DatabaseManager
 
 
@@ -76,8 +80,10 @@ class AnalysesPage(QWidget):
         self.export_table = QPushButton("Export table...")
         self.export_workbook = QPushButton("Export workbook...")
         self.open_results = QPushButton("Open results folder")
+        self.explore_mapping = QPushButton("Explore across analyses...")
+        self.explore_mapping.clicked.connect(self._explore_mapping)
         actions = QHBoxLayout()
-        for button in (self.export_table, self.export_workbook, self.open_results):
+        for button in (self.export_table, self.export_workbook, self.open_results, self.explore_mapping):
             button.setEnabled(False)
             actions.addWidget(button)
         mapping_page = QWidget()
@@ -111,7 +117,19 @@ class AnalysesPage(QWidget):
         self.mtdna_page = MtdnaPage(database_manager or self.kegg_page.manager)
         self.proteomics_qc_page = ProteomicsQCPage()
         self.differential_analysis_page = DifferentialAnalysisPage()
+        self.cross_module_explorer = CrossModuleExplorer()
+        self.cross_module_explorer.open_target_requested.connect(self.open_analysis_target)
+        self.differential_analysis_page.explore_requested.connect(self.explore_context)
+        self.proteomics_qc_page.explore_requested.connect(self.explore_context)
+        for module_id, page in (
+            ("presence_absence", self.presence_page), ("go", self.go_page),
+            ("kegg", self.kegg_page), ("reactome", self.reactome_page),
+            ("mitocarta", self.mitocarta_page), ("domains", self.interpro_pfam_page),
+            ("string", self.string_page), ("complexes", self.complex_page),
+            ("mtdna_evidence", self.mtdna_page)):
+            attach_explore_action(page, module_id, self.explore_context)
         module_tabs = QTabWidget()
+        self.module_tabs = module_tabs
         module_tabs.addTab(mapping_page, "Identificação e anotação")
         module_tabs.addTab(self.presence_page, "Presence / absence")
         module_tabs.addTab(self.go_page, "Gene Ontology")
@@ -124,9 +142,72 @@ class AnalysesPage(QWidget):
         module_tabs.addTab(self.mtdna_page, "mtDNA Evidence")
         module_tabs.addTab(self.proteomics_qc_page, "Proteomics QC")
         module_tabs.addTab(self.differential_analysis_page, "Differential Analysis")
+        module_tabs.addTab(self.cross_module_explorer, "Cross-module Explorer")
         outer_layout = QVBoxLayout(self)
         outer_layout.addWidget(module_tabs)
 
+    def explore_context(self, module_id: str, run_id: str, feature_id: str) -> None:
+        self.module_tabs.setCurrentWidget(self.cross_module_explorer)
+        self.cross_module_explorer.explore_feature(module_id, run_id, feature_id)
+
+    def _explore_mapping(self) -> None:
+        row = self.preview.currentRow()
+        if row < 0 or not self.project:
+            return
+        headers = {self.preview.horizontalHeaderItem(index).text(): index
+            for index in range(self.preview.columnCount())}
+        column = headers.get("original_id", headers.get("uniprot_accession"))
+        if column is None or not self.preview.item(row, column):
+            return
+        value = self.preview.item(row, column).text()
+        run_id = str(self.project.config.get("mapping_run_id", ""))
+        from ..core.mapping_analysis import read_mapping_outputs
+        try:
+            run_id = str(read_mapping_outputs(self.project).metadata.get("run_id", run_id))
+        except RuntimeError:
+            pass
+        self.module_tabs.setCurrentWidget(self.cross_module_explorer)
+        self.cross_module_explorer.explore_feature("mapping", run_id, value)
+
+    def open_analysis_target(self, module_id: str, run_id: str,
+                             target_identity: str, record_type: str = "", source_row: str = "") -> None:
+        if not self.project:
+            self.cross_module_explorer.status.setText("Open a project before navigating to a result.")
+            return
+        if module_id == "mapping":
+            from ..core.mapping_analysis import read_mapping_outputs
+            try:
+                outputs = read_mapping_outputs(self.project)
+                if str(outputs.metadata.get("run_id")) != str(run_id):
+                    raise FileNotFoundError("Historical mapping data are not available for safe cross-module resolution.")
+                self.show_outputs(outputs)
+                self.module_tabs.setCurrentIndex(0)
+                self.mapping_target_hint.setText(f"Loaded run: {run_id} | Target: {target_identity}")
+            except (OSError, RuntimeError) as error:
+                self.cross_module_explorer.status.setText(str(error))
+            return
+        pages = {"presence_absence": self.presence_page, "go": self.go_page,
+            "kegg": self.kegg_page, "reactome": self.reactome_page,
+            "mitocarta": self.mitocarta_page, "domains": self.interpro_pfam_page,
+            "string": self.string_page, "complexes": self.complex_page,
+            "mtdna_evidence": self.mtdna_page, "proteomics_qc": self.proteomics_qc_page,
+            "differential": self.differential_analysis_page}
+        page = pages.get(module_id)
+        if page is None:
+            self.cross_module_explorer.status.setText(f"No analysis page for {module_id}.")
+            return
+        previous_page = self.module_tabs.currentWidget()
+        self.module_tabs.setCurrentWidget(page)
+        try:
+            adapter = default_registry().get(module_id)
+            open_persisted_target(self.project, adapter, page, run_id, target_identity, source_row=source_row)
+        except (OSError, KeyError, RuntimeError, ValueError) as error:
+            self.module_tabs.setCurrentWidget(previous_page)
+            self.cross_module_explorer.status.setText(f"Could not open {module_id} run {run_id}: {error}")
+            return
+        self.module_tabs.setCurrentWidget(page)
+        self.cross_module_explorer.status.setText(
+            f"Opened {module_id} run {run_id} for target {target_identity}.")
     def _organism_mode(self) -> None:
         custom = self.organism.currentData() is None
         self.custom_name.setEnabled(custom)
@@ -152,6 +233,7 @@ class AnalysesPage(QWidget):
         self.mtdna_page.set_project(project)
         self.proteomics_qc_page.set_project(project)
         self.differential_analysis_page.set_project(project)
+        self.cross_module_explorer.set_project(project)
         if project is None:
             self.run_button.setEnabled(False)
             return
@@ -190,7 +272,7 @@ class AnalysesPage(QWidget):
         for row, values in enumerate(frame.itertuples(index=False, name=None)):
             for column, value in enumerate(values):
                 self.preview.setItem(row, column, QTableWidgetItem("" if value is None else str(value)))
-        for button in (self.export_table, self.export_workbook, self.open_results):
+        for button in (self.export_table, self.export_workbook, self.open_results, self.explore_mapping):
             button.setEnabled(True)
 
     def _show_detail(self, row: int, _column: int, _old_row: int, _old_column: int) -> None:

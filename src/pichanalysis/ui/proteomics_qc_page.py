@@ -79,6 +79,8 @@ class ProteomicsQCWorker(QThread):
 
 
 class ProteomicsQCPage(QWidget):
+    explore_requested = Signal(str, str, str)
+
     def __init__(self, runtime=None):
         super().__init__()
         self.runtime = runtime or RRuntime()
@@ -216,8 +218,10 @@ class ProteomicsQCPage(QWidget):
         self.export_workbook.clicked.connect(self._export_workbook)
         self.export_graph.clicked.connect(self._export_graph)
         self.open_results.clicked.connect(self._open_results)
+        self.explore_button = QPushButton("Explore across analyses...")
+        self.explore_button.clicked.connect(self._explore_selected)
         actions = QHBoxLayout()
-        for widget in (self.export_table, self.export_workbook, self.export_graph, self.open_results):
+        for widget in (self.export_table, self.export_workbook, self.export_graph, self.open_results, self.explore_button):
             actions.addWidget(widget)
         main = QVBoxLayout(self)
         for widget in (config, handling, run_group, result_box):
@@ -225,6 +229,18 @@ class ProteomicsQCPage(QWidget):
         main.addLayout(actions)
         self._update_actions()
 
+    def _explore_selected(self):
+        if not self.outputs:
+            return
+        table = self.tables[("Detection", "feature_detection")]
+        row = table.currentRow()
+        headers = {table.horizontalHeaderItem(column).text(): column
+            for column in range(table.columnCount())}
+        column = headers.get("Feature Id")
+        if row < 0 or column is None or not table.item(row, column):
+            return
+        self.explore_requested.emit("proteomics_qc", self.outputs["metadata"]["run_id"],
+            table.item(row, column).text())
     def set_project(self, project):
         self.project = project
         self.outputs = None
