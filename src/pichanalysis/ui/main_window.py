@@ -77,6 +77,7 @@ class MainWindow(QMainWindow):
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
         self.analyses_page = AnalysesPage(self.database_manager_page.manager)
+        self.analyses_page.proteomics_qc_page.runtime = self.runtime
         self.scripts_page = ScriptsPage(APPLICATION_ROOT / "r_scripts", self.runtime)
         self.navigation = QListWidget()
         self.navigation.addItems(["Project", "Data", "Analyses", "Database Manager", "Scripts / Logs"])
@@ -157,7 +158,8 @@ class MainWindow(QMainWindow):
                 bool(self._complex_threads) or
                 (self.mtdna_worker and self.mtdna_worker.isRunning()) or
                 bool(self._mtdna_threads) or
-                self.analyses_page.interpro_pfam_page.is_running() or self.database_manager_page.is_running()):
+                self.analyses_page.interpro_pfam_page.is_running() or
+                self.analyses_page.proteomics_qc_page.is_running() or self.database_manager_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
                 "Wait for the current analysis or database download before closing PichAnalysis.",

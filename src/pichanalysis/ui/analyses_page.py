@@ -22,6 +22,7 @@ from .interpro_pfam_page import InterProPfamPage
 from .string_page import StringPage
 from .complexes_page import ComplexPage
 from .mtdna_page import MtdnaPage
+from .proteomics_qc_page import ProteomicsQCPage
 from ..core.database_manager import DatabaseManager
 
 
@@ -107,6 +108,7 @@ class AnalysesPage(QWidget):
         self.string_page = StringPage(database_manager or self.kegg_page.manager)
         self.complex_page = ComplexPage(database_manager or self.kegg_page.manager)
         self.mtdna_page = MtdnaPage(database_manager or self.kegg_page.manager)
+        self.proteomics_qc_page = ProteomicsQCPage()
         module_tabs = QTabWidget()
         module_tabs.addTab(mapping_page, "Identificação e anotação")
         module_tabs.addTab(self.presence_page, "Presence / absence")
@@ -118,6 +120,7 @@ class AnalysesPage(QWidget):
         module_tabs.addTab(self.string_page, "STRING")
         module_tabs.addTab(self.complex_page, "Complexes")
         module_tabs.addTab(self.mtdna_page, "mtDNA Evidence")
+        module_tabs.addTab(self.proteomics_qc_page, "Proteomics QC")
         outer_layout = QVBoxLayout(self)
         outer_layout.addWidget(module_tabs)
 
@@ -144,6 +147,7 @@ class AnalysesPage(QWidget):
         self.string_page.set_project(project)
         self.complex_page.set_project(project)
         self.mtdna_page.set_project(project)
+        self.proteomics_qc_page.set_project(project)
         if project is None:
             self.run_button.setEnabled(False)
             return
