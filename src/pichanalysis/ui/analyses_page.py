@@ -21,6 +21,7 @@ from .mitocarta_page import MitoCartaPage
 from .interpro_pfam_page import InterProPfamPage
 from .string_page import StringPage
 from .complexes_page import ComplexPage
+from .mtdna_page import MtdnaPage
 from ..core.database_manager import DatabaseManager
 
 
@@ -105,6 +106,7 @@ class AnalysesPage(QWidget):
         self.interpro_pfam_page = InterProPfamPage(database_manager or self.kegg_page.manager)
         self.string_page = StringPage(database_manager or self.kegg_page.manager)
         self.complex_page = ComplexPage(database_manager or self.kegg_page.manager)
+        self.mtdna_page = MtdnaPage(database_manager or self.kegg_page.manager)
         module_tabs = QTabWidget()
         module_tabs.addTab(mapping_page, "Identificação e anotação")
         module_tabs.addTab(self.presence_page, "Presence / absence")
@@ -115,6 +117,7 @@ class AnalysesPage(QWidget):
         module_tabs.addTab(self.interpro_pfam_page, "InterPro / Pfam")
         module_tabs.addTab(self.string_page, "STRING")
         module_tabs.addTab(self.complex_page, "Complexes")
+        module_tabs.addTab(self.mtdna_page, "mtDNA Evidence")
         outer_layout = QVBoxLayout(self)
         outer_layout.addWidget(module_tabs)
 
@@ -140,6 +143,7 @@ class AnalysesPage(QWidget):
         self.interpro_pfam_page.set_project(project)
         self.string_page.set_project(project)
         self.complex_page.set_project(project)
+        self.mtdna_page.set_project(project)
         if project is None:
             self.run_button.setEnabled(False)
             return

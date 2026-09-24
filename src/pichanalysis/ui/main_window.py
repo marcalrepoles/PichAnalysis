@@ -28,6 +28,7 @@ from ..core.mitocarta_analysis import MitoCartaParameters
 from ..core.interpro_pfam_analysis import InterProPfamParameters
 from ..core.string_analysis import StringParameters
 from ..core.complex_analysis import ComplexParameters
+from ..core.mtdna_analysis import MtdnaParameters
 from ..core.presence_analysis import (
     build_presence_arguments, export_presence, read_presence_outputs,
 )
@@ -42,6 +43,7 @@ from .mitocarta_page import MitoCartaAnalysisWorker
 from .interpro_pfam_page import InterProPfamAnalysisWorker
 from .string_page import StringAnalysisWorker
 from .complexes_page import ComplexAnalysisWorker
+from .mtdna_page import MtdnaAnalysisWorker
 from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
 
@@ -69,6 +71,8 @@ class MainWindow(QMainWindow):
         self._string_threads: list[StringAnalysisWorker] = []
         self.complex_worker: ComplexAnalysisWorker | None = None
         self._complex_threads: list[ComplexAnalysisWorker] = []
+        self.mtdna_worker: MtdnaAnalysisWorker | None = None
+        self._mtdna_threads: list[MtdnaAnalysisWorker] = []
         self.project_page = ProjectPage()
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
@@ -128,6 +132,9 @@ class MainWindow(QMainWindow):
         complex_page=self.analyses_page.complex_page
         complex_page.run_requested.connect(self._run_complex)
         complex_page.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
+        mtdna_page=self.analyses_page.mtdna_page
+        mtdna_page.run_requested.connect(self._run_mtdna)
+        mtdna_page.open_database_requested.connect(lambda:self.navigation.setCurrentRow(3))
         self._set_project_enabled(False)
 
     def _set_project_enabled(self, enabled: bool) -> None:
@@ -148,6 +155,8 @@ class MainWindow(QMainWindow):
                 bool(self._string_threads) or
                 (self.complex_worker and self.complex_worker.isRunning()) or
                 bool(self._complex_threads) or
+                (self.mtdna_worker and self.mtdna_worker.isRunning()) or
+                bool(self._mtdna_threads) or
                 self.analyses_page.interpro_pfam_page.is_running() or self.database_manager_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
@@ -630,6 +639,50 @@ class MainWindow(QMainWindow):
         box.exec()
         if box.clickedButton() == proceed:
             self._run_complex(parameters, True)
+    def _run_mtdna(self, parameters: dict, allow_target_outside_background: bool = False) -> None:
+        if not self.project or self.mtdna_worker:
+            return
+        try:
+            options = MtdnaParameters(**parameters,
+                allow_target_outside_background=allow_target_outside_background)
+        except (TypeError, ValueError) as error:
+            QMessageBox.warning(self, "mtDNA Evidence analysis", str(error))
+            return
+        worker = MtdnaAnalysisWorker(self.project, self.database_manager_page.manager,
+            self.runtime, new_run_id(), options)
+        self.mtdna_worker = worker
+        self._mtdna_threads.append(worker)
+        self.analyses_page.mtdna_page.set_running(True)
+        worker.succeeded.connect(self._mtdna_finished)
+        worker.failed.connect(self._mtdna_failed)
+        worker.target_outside.connect(lambda details, p=parameters:self._mtdna_target_outside(details,p))
+        worker.finished.connect(lambda w=worker:self._mtdna_threads.remove(w))
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _mtdna_finished(self, outputs) -> None:
+        self.mtdna_worker = None
+        self.analyses_page.mtdna_page.set_running(False)
+        self.analyses_page.mtdna_page.show_outputs(outputs)
+        if self.project:self.scripts_page.set_project_scripts(self.project.root / "scripts" / "runs")
+
+    def _mtdna_failed(self, message: str) -> None:
+        self.mtdna_worker = None
+        self.analyses_page.mtdna_page.set_running(False)
+        QMessageBox.warning(self, "mtDNA Evidence analysis failed", message)
+
+    def _mtdna_target_outside(self, details: dict, parameters: dict) -> None:
+        self.mtdna_worker = None
+        self.analyses_page.mtdna_page.set_running(False)
+        box = QMessageBox(self)
+        box.setWindowTitle("mtDNA target outside background")
+        box.setText(f"{len(details.get('entities_outside_background', []))} target entities are outside the selected "
+            f"background (target: {details.get('initial_target_size')}; background: "
+            f"{details.get('initial_background_size')}). Continue will restrict the target and record the adjustment.")
+        proceed = box.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() == proceed:self._run_mtdna(parameters,True)
     def _test_r(self) -> None:
         script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"
         output_dir = self.project.root / "logs" if self.project else Path(tempfile.gettempdir())
