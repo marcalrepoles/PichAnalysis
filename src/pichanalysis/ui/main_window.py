@@ -35,6 +35,7 @@ from ..core.presence_analysis import (
 from ..core.project import Project, ProjectError, create_project, open_project
 from ..core.r_runtime import RRuntime
 from .analyses_page import AnalysesPage
+from .consolidated_report_page import ConsolidatedReportPage
 from .data_page import DataPage
 from .database_manager_page import DatabaseManagerPage
 from .mapping_worker import MappingWorker
@@ -77,14 +78,15 @@ class MainWindow(QMainWindow):
         self.data_page = DataPage()
         self.database_manager_page = DatabaseManagerPage()
         self.analyses_page = AnalysesPage(self.database_manager_page.manager)
+        self.report_page = ConsolidatedReportPage()
         self.analyses_page.proteomics_qc_page.runtime = self.runtime
         self.analyses_page.differential_analysis_page.runtime = self.runtime
         self.scripts_page = ScriptsPage(APPLICATION_ROOT / "r_scripts", self.runtime)
         self.navigation = QListWidget()
-        self.navigation.addItems(["Project", "Data", "Analyses", "Database Manager", "Scripts / Logs"])
+        self.navigation.addItems(["Project", "Data", "Analyses", "Database Manager", "Reports", "Scripts / Logs"])
         self.navigation.setFixedWidth(170)
         self.pages = QStackedWidget()
-        for page in (self.project_page, self.data_page, self.analyses_page, self.database_manager_page, self.scripts_page):
+        for page in (self.project_page, self.data_page, self.analyses_page, self.database_manager_page, self.report_page, self.scripts_page):
             self.pages.addWidget(page)
         container = QWidget()
         layout = QHBoxLayout(container)
@@ -161,7 +163,7 @@ class MainWindow(QMainWindow):
                 bool(self._mtdna_threads) or
                 self.analyses_page.interpro_pfam_page.is_running() or
                 self.analyses_page.proteomics_qc_page.is_running() or
-                self.analyses_page.differential_analysis_page.is_running() or self.database_manager_page.is_running()):
+                self.analyses_page.differential_analysis_page.is_running() or self.database_manager_page.is_running() or self.report_page.is_running()):
             QMessageBox.information(
                 self, "Operation in progress",
                 "Wait for the current analysis or database download before closing PichAnalysis.",
@@ -187,6 +189,7 @@ class MainWindow(QMainWindow):
         self._set_project_enabled(True)
         self._restore_data()
         self.analyses_page.set_project(project)
+        self.report_page.set_project(project)
         self.scripts_page.set_project_scripts(project.root / "scripts" / "runs")
         try:
             if (project.root / "mapping" / "latest_metadata.json").is_file():
