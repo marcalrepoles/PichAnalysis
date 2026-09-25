@@ -17,6 +17,7 @@ datas += [(str(path), "r_scripts/lib") for path in sorted((ROOT / "r_scripts" / 
 datas += [(str(ROOT / "docs" / name), "docs") for name in ("installation-windows.md", "runtime-dependencies.md")]
 datas += [(str(ROOT / "docs" / "releases" / "0.1.0.md"), "docs/releases")]
 datas += [(str(ROOT / "THIRD_PARTY_NOTICES.txt"), ".")]
+datas += [(str(ROOT / name), "branding") for name in ("icon.ico", "splash.png")]
 
 version_info = VSVersionInfo(
     ffi=FixedFileInfo(filevers=parts, prodvers=parts, mask=0x3F, flags=0, OS=0x40004, fileType=1, subtype=0),
@@ -47,6 +48,6 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [], exclude_binaries=True, name="PichAnalysis",
     debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
-    console=False, version=version_info,
+    console=False, version=version_info, icon=str(ROOT / "icon.ico"),
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="PichAnalysis")

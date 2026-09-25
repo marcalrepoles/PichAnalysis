@@ -25,6 +25,10 @@ OutputBaseFilename=PichAnalysis-{#AppVersion}-Windows-x86_64-Setup
 Compression=lzma2
 SolidCompression=yes
 UninstallDisplayIcon={app}\PichAnalysis.exe
+SetupIconFile={#BundleDir}\_internal\branding\icon.ico
+UsePreviousAppDir=yes
+CloseApplications=yes
+RestartApplications=no
 DisableProgramGroupPage=yes
 WizardStyle=modern
 LanguageDetectionMethod=none
@@ -39,8 +43,8 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\PichAnalysis"; Filename: "{app}\PichAnalysis.exe"
-Name: "{autodesktop}\PichAnalysis"; Filename: "{app}\PichAnalysis.exe"; Tasks: desktopicon
+Name: "{autoprograms}\PichAnalysis"; Filename: "{app}\PichAnalysis.exe"; IconFilename: "{app}\PichAnalysis.exe"
+Name: "{autodesktop}\PichAnalysis"; Filename: "{app}\PichAnalysis.exe"; IconFilename: "{app}\PichAnalysis.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\PichAnalysis.exe"; Description: "Launch PichAnalysis"; Flags: nowait postinstall skipifsilent

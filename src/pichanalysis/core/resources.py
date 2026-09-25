@@ -36,3 +36,14 @@ def r_script(name: str) -> Path:
     if not path.is_file():
         raise FileNotFoundError(f"Required PichAnalysis R script is missing: {name}")
     return path
+
+def branding_asset(name: str) -> Path:
+    """Locate an application-owned image in source or frozen builds."""
+    if name not in {"icon.ico", "splash.png"}:
+        raise ValueError("Invalid branding asset name.")
+    frozen_root = getattr(sys, "_MEIPASS", None)
+    root = Path(frozen_root) if frozen_root else Path(__file__).resolve().parents[3]
+    path = root / "branding" / name if frozen_root else root / name
+    if not path.is_file():
+        raise FileNotFoundError(f"Required PichAnalysis branding asset is missing: {name}")
+    return path

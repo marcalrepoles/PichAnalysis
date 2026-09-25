@@ -33,6 +33,9 @@ def verify(bundle: Path, output: Path, *, missing_r: bool = True) -> dict:
             raise AssertionError(f"Missing bundled R script: {name}")
     if not (scripts / "lib" / "common.R").is_file():
         raise AssertionError("Missing bundled R helpers")
+    for name in ("icon.ico", "splash.png"):
+        if not (internal / "branding" / name).is_file():
+            raise AssertionError(f"Missing bundled branding asset: {name}")
     for forbidden in (bundle / "tests", internal / "tests", scripts / "tests", bundle / ".git"):
         if forbidden.exists():
             raise AssertionError(f"Forbidden distribution content: {forbidden}")

@@ -58,3 +58,26 @@ def test_release_manifest_schema_and_checksums(tmp_path):
     assert manifest["scientific_databases_bundled"] is False
     assert (tmp_path / "SHA256SUMS.txt").is_file()
     assert json.loads((tmp_path / "release_manifest.json").read_text())["artifacts"] == manifest["artifacts"]
+
+def test_branding_assets_and_minimum_splash(monkeypatch):
+    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtWidgets import QApplication, QMainWindow
+    from pichanalysis import app as app_module
+    from pichanalysis.core.resources import branding_asset
+
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    assert branding_asset("icon.ico").is_file()
+    assert branding_asset("splash.png").is_file()
+    application = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(app_module, "MainWindow", QMainWindow)
+    window, splash = app_module.show_branded_window(application, minimum_splash_ms=3000)
+    assert splash.isVisible() and not window.isVisible()
+    assert not application.windowIcon().isNull()
+    observations = []
+    loop = QEventLoop()
+    QTimer.singleShot(2500, lambda: observations.append((splash.isVisible(), window.isVisible())))
+    QTimer.singleShot(3300, loop.quit)
+    loop.exec()
+    assert observations == [(True, False)]
+    assert window.isVisible() and not splash.isVisible()
+    window.close()
