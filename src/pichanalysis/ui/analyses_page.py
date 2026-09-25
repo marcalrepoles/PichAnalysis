@@ -128,6 +128,7 @@ class AnalysesPage(QWidget):
         self.cross_module_explorer.biological_context_requested.connect(self._open_entity_context)
         self.differential_analysis_page.biological_context_requested.connect(self.open_biological_context)
         self.experiment_comparison_page.biological_context_requested.connect(self.open_biological_context)
+        self.experiment_comparison_page.derived_target_requested.connect(self.open_derived_target)
         self.cross_module_explorer.open_target_requested.connect(self.open_analysis_target)
         self.differential_analysis_page.explore_requested.connect(self.explore_context)
         self.proteomics_qc_page.explore_requested.connect(self.explore_context)
@@ -218,6 +219,62 @@ class AnalysesPage(QWidget):
         self.module_tabs.setCurrentWidget(self.cross_module_explorer)
         self.cross_module_explorer.explore_feature("mapping", run_id, value)
 
+    def open_derived_target(self, handoff: dict) -> None:
+        """Preload a manual target, preserving every destination safeguard."""
+        from PySide6.QtCore import Qt, QItemSelectionModel
+        from ..core.derived_set_handoff import record
+        pages = {"go": self.go_page, "kegg": self.kegg_page,
+            "reactome": self.reactome_page, "mitocarta": self.mitocarta_page,
+            "mtdna": self.mtdna_page, "domains": self.interpro_pfam_page,
+            "string": self.string_page, "complexes": self.complex_page}
+        page = pages.get(handoff.get("destination"))
+        if page is None or self.project is None:
+            return
+        rows = set(handoff["source_rows"])
+        if handoff["destination"] in {"go", "kegg"}:
+            manual_index = page.target.findData("manual")
+            if manual_index < 0:
+                QMessageBox.warning(self, "Target unavailable", "The destination is not ready for manual target selection.")
+                return
+            page.target.setCurrentIndex(manual_index)
+            control = page.manual_rows if handoff["destination"] == "go" else page.manual
+            control.setText(", ".join(str(value) for value in sorted(rows)))
+            found = rows
+        else:
+            manual_index = page.target.findData("Manual selection")
+            if manual_index < 0:
+                QMessageBox.warning(self, "Target unavailable", "The destination is not ready for manual target selection.")
+                return
+            page.target.setCurrentIndex(manual_index)
+            control = page.manual
+            if handoff["destination"] in {"mtdna", "complexes"}:
+                frame = page.mapping_frame
+                found = set()
+                control.clearSelection()
+                if not frame.empty:
+                    for index, source in enumerate(frame.source_row):
+                        if int(source) in rows:
+                            control.selectionModel().select(control.model().index(index, 0),
+                                QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
+                            found.add(int(source))
+            else:
+                found = set()
+                control.clearSelection()
+                for index in range(control.count()):
+                    item = control.item(index)
+                    value = int(item.data(Qt.ItemDataRole.UserRole))
+                    if value in rows:
+                        item.setSelected(True)
+                        found.add(value)
+        if found != rows:
+            QMessageBox.warning(self, "Target unavailable",
+                "The destination does not expose every selected source row. No analysis was started.")
+            return
+        page.derived_target_provenance = handoff.copy()
+        record(self.project, handoff)
+        self.module_tabs.setCurrentWidget(page)
+        QMessageBox.information(self, "Review target",
+            "The derived target is preloaded. Review its background, parameters and snapshot, then run the analysis manually.")
     def open_analysis_target(self, module_id: str, run_id: str,
                              target_identity: str, record_type: str = "", source_row: str = "") -> None:
         if not self.project:

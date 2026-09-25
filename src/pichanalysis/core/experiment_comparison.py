@@ -301,11 +301,11 @@ def compare(project, spec: ComparisonSpec, *, run_id: str | None = None) -> Path
     if bool(spec.differential_a) != bool(spec.differential_b):
         raise ComparisonError("Select two Differential runs or neither.")
     if spec.differential_a and spec.differential_b:
-        for side, run_id, confirmed in ((spec.a, spec.differential_a, spec.differential_match_a),
+        for side, differential_run_id, confirmed in ((spec.a, spec.differential_a, spec.differential_match_a),
                                         (spec.b, spec.differential_b, spec.differential_match_b)):
-            if side.source_kind.startswith("differential:") and side.source_kind != f"differential:{run_id}":
+            if side.source_kind.startswith("differential:") and side.source_kind != f"differential:{differential_run_id}":
                 raise ComparisonError("Selected Differential run does not match the frozen table source.")
-            if not confirmed and side.source_kind != f"differential:{run_id}":
+            if not confirmed and side.source_kind != f"differential:{differential_run_id}":
                 raise ComparisonError("Confirm that each Differential run corresponds to its dataset.")
     frame_a, sheet_a = _read_source(Path(spec.a.path), spec.a.sheet)
     frame_b, sheet_b = _read_source(Path(spec.b.path), spec.b.sheet)

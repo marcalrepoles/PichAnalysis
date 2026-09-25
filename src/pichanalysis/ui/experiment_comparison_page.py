@@ -219,6 +219,7 @@ class SourceBox(QWidget):
 
 class ExperimentComparisonPage(QWidget):
     biological_context_requested = Signal(str, str, str, object)
+    derived_target_requested = Signal(object)
 
     def __init__(self):
         super().__init__()
@@ -292,8 +293,28 @@ class ExperimentComparisonPage(QWidget):
         history_layout.addWidget(self.load_history)
         history_layout.addStretch()
         self.tabs.addTab(history, "History")
+        from .functional_comparison_widget import FunctionalComparisonWidget
+        self.functional = FunctionalComparisonWidget()
+        self.functional.context_requested.connect(self.biological_context_requested.emit)
+        self.tabs.addTab(self.functional, "Functional comparison")
+        self.derived_set = QComboBox()
+        from ..core.derived_set_handoff import DERIVED_SETS, DESTINATIONS
+        for key, label in DERIVED_SETS.items():
+            self.derived_set.addItem(label, key)
+        self.derived_destination = QComboBox()
+        for module in DESTINATIONS:
+            self.derived_destination.addItem(module.upper() if module != "domains" else "InterPro / Pfam", module)
+        self.analyze_set = QPushButton("Analyze this set...")
+        self.analyze_set.clicked.connect(self._analyze_derived)
+        derived_bar = QHBoxLayout()
+        derived_bar.addWidget(QLabel("Derived set"))
+        derived_bar.addWidget(self.derived_set)
+        derived_bar.addWidget(QLabel("Destination"))
+        derived_bar.addWidget(self.derived_destination)
+        derived_bar.addWidget(self.analyze_set)
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
+        layout.addLayout(derived_bar)
         self.context_button = QPushButton("Biological context...")
         self.context_button.setEnabled(False)
         layout.addWidget(self.context_button)
@@ -311,6 +332,7 @@ class ExperimentComparisonPage(QWidget):
     def set_project(self, project):
         self.project = project
         self.loaded = None
+        self.functional.set_comparison(project, None)
         self.mapping_path = None
         self.mapping_label.setText("No mapping selected. Different ID types will require mapping.")
         self.source_a.set_project(project)
@@ -408,6 +430,7 @@ class ExperimentComparisonPage(QWidget):
 
     def _display(self, loaded):
         self.loaded = loaded
+        self.functional.set_comparison(self.project, loaded["run_root"].name)
         summary = loaded["manifest"]["summary"]
         aliases = loaded["config"]
         lines = [f"{aliases['a']['alias']} vs {aliases['b']['alias']}",
@@ -495,3 +518,16 @@ class ExperimentComparisonPage(QWidget):
             source.name, "Excel workbook (*.xlsx)")
         if target:
             shutil.copy2(source, target)
+
+    def _analyze_derived(self):
+        if not self.project or not self.loaded:
+            QMessageBox.information(self, "No comparison", "Load a comparison first.")
+            return
+        from ..core.derived_set_handoff import prepare
+        try:
+            handoff = prepare(self.project, self.loaded["run_root"].name,
+                self.derived_set.currentData(), self.derived_destination.currentData())
+        except Exception as error:
+            QMessageBox.warning(self, "Target unavailable", str(error))
+            return
+        self.derived_target_requested.emit(handoff)

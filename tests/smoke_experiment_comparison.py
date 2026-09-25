@@ -43,6 +43,9 @@ def frozen_differential(project_root: Path, run_id: str, directions: list[str]):
 
 def smoke():
     app = QApplication.instance() or QApplication([])
+    from PySide6.QtWidgets import QMessageBox
+    QMessageBox.warning = lambda _parent, title, message: (_ for _ in ()).throw(AssertionError(f"{title}: {message}"))
+    QMessageBox.information = lambda _parent, title, message: (_ for _ in ()).throw(AssertionError(f"{title}: {message}"))
     with tempfile.TemporaryDirectory() as folder:
         root = Path(folder)
         a, b = root / "dataset_a.csv", root / "dataset_b.csv"
@@ -85,6 +88,69 @@ def smoke():
             assert {"Summary", "Master", "Differential", "A only", "B only", "Shared"} <= set(
                 workbook.sheet_names)
         run_id = page.loaded["run_root"].name
+        from pichanalysis.core import functional_comparison as fc
+        catalog = root / "mapping/tables/protein_catalog.csv"
+        catalog.parent.mkdir(parents=True)
+        pd.DataFrame({"source_row": [1, 2, 3, 4, 5],
+            "uniprot_accession": ["P12345", "P12346", "P12347", "A99999", "B99999"]}).to_csv(catalog, index=False)
+        def source(_project, module, run):
+            snap = "old" if run == "run_a" else "new"
+            if module == "go":
+                frame = pd.DataFrame({"GO_ID": ["GO:0001"], "Description": ["term"],
+                    "Protein_count": [1], "Protein_fraction": [0.5]})
+                tables = {ontology: {"frequency": frame, "enrichment": frame.assign(pvalue="0.01", **{"p.adjust": "0.02"}),
+                    "significant": frame, "membership": pd.DataFrame({"GO_ID": ["GO:0001"], "entity_id": ["P12345"]})}
+                    for ontology in ("BP", "MF", "CC")}
+            elif module == "kegg":
+                frame = pd.DataFrame({"pathway_id": ["hsa00010"], "pathway_name": ["Glycolysis"],
+                    "gene_count": [1], "genes": ["P12345"]})
+                tables = {"Pathways": {"frequency": frame, "enrichment": frame.assign(p_value="0.01", FDR="0.02"),
+                    "significant": frame}}
+            elif module == "reactome":
+                frame = pd.DataFrame({"Reactome_ID": ["R-HSA-1"], "Pathway": ["Pathway"],
+                    "Protein_count": [1]})
+                tables = {"Pathways": {"frequency": frame, "enrichment": frame.assign(p_value="0.01", FDR="0.02"),
+                    "significant": frame}}
+            else:
+                nodes = pd.DataFrame({"string_protein_id": ["9606.A", "9606.B"]})
+                edges = pd.DataFrame({"protein_a": ["9606.A"], "protein_b": ["9606.B"], "combined_score": [900]})
+                tables = {"Nodes": {"frequency": nodes}, "Edges": {"frequency": edges}}
+            return {"snapshot_id": snap, "network_type": "functional", "combined_score_threshold": 700}, tables
+        with patch.object(fc, "list_source_runs", return_value=["run_a", "run_b"]), patch.object(fc, "_source", side_effect=source):
+            page.functional.set_comparison(project, run_id)
+            for module in ("go", "kegg", "reactome", "string"):
+                panel = page.functional.panels[module]
+                panel.run_a.setCurrentIndex(panel.run_a.findData("run_a"))
+                panel.run_b.setCurrentIndex(panel.run_b.findData("run_b"))
+                panel._compare()
+                assert panel.loaded is not None
+            kegg = page.functional.panels["kegg"]
+            kegg.views["master"].table.selectRow(0)
+            contexts = []
+            page.biological_context_requested.connect(lambda *args: contexts.append(args))
+            kegg._open_context("A")
+            kegg._open_context("B")
+            assert len(contexts) == 2
+            assert contexts[0][1] == "run_a" and contexts[1][1] == "run_b"
+            exported = root / "functional_export.xlsx"
+            with patch("pichanalysis.ui.functional_comparison_widget.QFileDialog.getSaveFileName",
+                       return_value=(str(exported), "")):
+                kegg._export_workbook()
+            assert exported.is_file()
+            page.derived_set.setCurrentIndex(page.derived_set.findData("a_only"))
+            page.derived_destination.setCurrentIndex(page.derived_destination.findData("go"))
+            handoffs = []
+            page.derived_target_requested.connect(handoffs.append)
+            page._analyze_derived()
+            assert handoffs and handoffs[0]["source_rows"] == [4]
+            assert not (root / "analyses/GO/runs").exists()
+        page._compare()
+        second_run = page.loaded["run_root"].name
+        assert second_run != run_id
+        page.history.setCurrentIndex(page.history.findData(run_id))
+        page._load_history()
+        assert page.functional.panels["kegg"].loaded is not None
+        assert page.functional.panels["kegg"].loaded["config"]["snapshot_A"] == "old"
         a.unlink()
         b.unlink()
         page.set_project(project)
