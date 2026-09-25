@@ -24,7 +24,7 @@ class DataPage(QWidget):
         super().__init__()
         self._detections: dict[str, dict[str, Any]] = {}
         self.import_button = QPushButton("Import XLSX, CSV, or TSV")
-        self.summary = QLabel("Abra ou crie um projeto para importar dados.")
+        self.summary = QLabel("Open or create a project to import data.")
         self.summary.setWordWrap(True)
         self.preview = QTableWidget()
         self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -43,7 +43,7 @@ class DataPage(QWidget):
         self.mapping.verticalHeader().setVisible(False)
         self.mapping.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.mapping.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
-        self.apply_button = QPushButton("Aplicar sugestões automáticas")
+        self.apply_button = QPushButton("Apply automatic suggestions")
         self.save_button = QPushButton("Save and validate configuration")
         self.status = QLabel("Configuration: Not configured")
         self.status.setWordWrap(True)
@@ -53,7 +53,7 @@ class DataPage(QWidget):
         tabs = QTabWidget()
         preview_page = QWidget()
         preview_layout = QVBoxLayout(preview_page)
-        preview_layout.addWidget(QLabel("Pré-visualização (até 200 linhas)"))
+        preview_layout.addWidget(QLabel("Preview (up to 200 rows)"))
         preview_layout.addWidget(self.preview, 3)
         preview_layout.addWidget(QLabel("Detected columns"))
         preview_layout.addWidget(self.columns, 2)
@@ -65,7 +65,7 @@ class DataPage(QWidget):
         mapping_layout.addWidget(self.save_button)
         mapping_layout.addWidget(self.status)
         mapping_layout.addWidget(self.design_summary)
-        tabs.addTab(preview_page, "Tabela e colunas")
+        tabs.addTab(preview_page, "Table and columns")
         tabs.addTab(mapping_page, "Column configuration")
 
         layout = QVBoxLayout(self)
@@ -86,9 +86,9 @@ class DataPage(QWidget):
 
     def show_result(self, result: ImportResult, mapping: dict[str, dict[str, Any]] | None = None) -> None:
         frame = result.dataframe
-        sheet = f" | Planilha: {result.sheet}" if result.sheet else ""
+        sheet = f" | Worksheet: {result.sheet}" if result.sheet else ""
         self.summary.setText(
-            f"Arquivo: {result.original_path.name} | Formato: {result.source_format.upper()}"
+            f"File: {result.original_path.name} | Format: {result.source_format.upper()}"
             f"{sheet} | Rows: {len(frame)} | Columns: {len(frame.columns)}"
         )
         preview = frame.head(self.PREVIEW_ROWS)
@@ -122,9 +122,9 @@ class DataPage(QWidget):
             detection = config.get("detection") or {}
             self._detections[name] = detection
             confidence = round(float(detection.get("confidence", 0)) * 100)
-            detection_text = f"{confidence}% — {detection.get('reason', 'Sem sugestão')}"
+            detection_text = f"{confidence}% — {detection.get('reason', 'No suggestion')}"
             if detection.get("contains_multiple"):
-                detection_text += " Algumas células contêm múltiplos identificadores."
+                detection_text += " Some cells contain multiple identifiers."
             self.mapping.setCellWidget(row, 1, role)
             self.mapping.setCellWidget(row, 2, primary)
             self.mapping.setCellWidget(row, 3, identifier)
@@ -188,13 +188,13 @@ class DataPage(QWidget):
             lines: list[str] = []
             if primary:
                 identifier_label = IDENTIFIER_LABELS[IdentifierType(primary[1]["identifier_type"])]
-                lines.extend(["Identificador principal", f"{primary[0]} — {identifier_label}"])
+                lines.extend(["Primary identifier", f"{primary[0]} — {identifier_label}"])
             if counts:
-                lines.append("\nCondições")
-                lines.extend(f"{condition}: {count} coluna(s) quantitativa(s)" for condition, count in sorted(counts.items()))
+                lines.append("\nConditions")
+                lines.extend(f"{condition}: {count} quantitative column(s)" for condition, count in sorted(counts.items()))
             self.design_summary.setText("\n".join(lines))
         else:
             self.status.setText("Configuration: Invalid\n" + "\n".join(f"• {item}" for item in validation.errors))
             self.design_summary.clear()
         if validation.warnings:
-            self.status.setText(self.status.text() + "\nAvisos:\n" + "\n".join(f"• {item}" for item in validation.warnings))
+            self.status.setText(self.status.text() + "\nWarnings:\n" + "\n".join(f"• {item}" for item in validation.warnings))

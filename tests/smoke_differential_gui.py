@@ -11,7 +11,7 @@ from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication
 
 from pichanalysis.ui.differential_analysis_page import DifferentialAnalysisPage
-from tests.smoke_differential_preparation import fixture_project
+from smoke_differential_preparation import fixture_project
 
 
 def wait_for_run(page):

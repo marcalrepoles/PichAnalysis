@@ -11,7 +11,7 @@ from PySide6.QtCore import QEventLoop, QTimer, Qt
 from PySide6.QtWidgets import QApplication, QFileDialog
 
 from pichanalysis.ui.main_window import MainWindow
-from tests.smoke_proteomics_qc import fixture_project
+from smoke_proteomics_qc import fixture_project
 
 
 def wait_for_worker(page, timeout_ms=30000):

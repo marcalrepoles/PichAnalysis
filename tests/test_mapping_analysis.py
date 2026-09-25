@@ -44,7 +44,7 @@ def test_analysis_blocked_without_primary_identifier(tmp_path):
 def test_analysis_blocked_without_organism(tmp_path):
     state = mapping_readiness(configured_project(tmp_path))
     assert not state.ready
-    assert "organismo" in state.reason.lower()
+    assert "organism" in state.reason.lower()
 
 
 def test_safe_mapping_arguments(tmp_path):

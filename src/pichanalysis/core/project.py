@@ -54,7 +54,7 @@ class Project:
             temporary.replace(self.config_path)
         except OSError as error:
             temporary.unlink(missing_ok=True)
-            raise ProjectError(f"Não foi possível salvar project.json: {error}") from error
+            raise ProjectError(f"Could not save project.json: {error}") from error
 
     def relative(self, path: Path) -> str:
         return path.resolve().relative_to(self.root.resolve()).as_posix()
@@ -72,12 +72,12 @@ class Project:
     def copy_original(self, source: Path) -> Path:
         source = Path(source)
         if not source.is_file():
-            raise ProjectError("O arquivo selecionado não existe.")
+            raise ProjectError("The selected file does not exist.")
         destination = self.reserve_original(source)
         try:
             shutil.copy2(source, destination)
         except OSError as error:
-            raise ProjectError(f"Não foi possível copiar o arquivo original: {error}") from error
+            raise ProjectError(f"Could not copy the original file: {error}") from error
         return destination
 
 
@@ -85,19 +85,19 @@ def create_project(parent: Path, name: str) -> Project:
     parent = Path(parent).expanduser()
     clean_name = name.strip()
     if not clean_name or clean_name in {".", ".."}:
-        raise ProjectError("Informe um nome de projeto válido.")
+        raise ProjectError("Enter a valid project name.")
     if re.search(r'[<>:"/\\|?*]', clean_name):
-        raise ProjectError("O nome do projeto contém caracteres não permitidos.")
+        raise ProjectError("The project name contains forbidden characters.")
     root = parent / clean_name
     if root.exists():
-        raise ProjectError("Já existe um arquivo ou pasta com esse nome.")
+        raise ProjectError("A file or folder with this name already exists.")
     created_at = _now()
     try:
         root.mkdir(parents=True)
         for directory in PROJECT_DIRECTORIES:
             (root / directory).mkdir(parents=True)
     except OSError as error:
-        raise ProjectError(f"Não foi possível criar a estrutura do projeto: {error}") from error
+        raise ProjectError(f"Could not create the project directory structure: {error}") from error
     project = Project(
         root=root.resolve(),
         config={
@@ -121,7 +121,7 @@ def create_project(parent: Path, name: str) -> Project:
             "columns": {},
             "column_configuration": {
                 "status": "not_configured",
-                "errors": ["Nenhum identificador principal selecionado."],
+                "errors": ["No primary identifier selected."],
                 "warnings": [],
             },
         },
@@ -136,14 +136,14 @@ def open_project(root: Path) -> Project:
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
     except FileNotFoundError as error:
-        raise ProjectError("A pasta não contém project.json.") from error
+        raise ProjectError("The folder does not contain project.json.") from error
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise ProjectError(f"project.json inválido ou ilegível: {error}") from error
+        raise ProjectError(f"project.json is invalid or unreadable: {error}") from error
     required = {"schema_version", "application", "project_name", "input"}
     if not isinstance(config, dict) or not required.issubset(config):
-        raise ProjectError("project.json não contém os campos obrigatórios.")
+        raise ProjectError("project.json is missing required fields.")
     if config["application"] != "PichAnalysis" or config["schema_version"] != 1:
-        raise ProjectError("A pasta não é um projeto PichAnalysis compatível.")
+        raise ProjectError("The folder is not a compatible PichAnalysis project.")
     if not all((root / directory).is_dir() for directory in PROJECT_DIRECTORIES):
-        raise ProjectError("A estrutura de pastas do projeto está incompleta.")
+        raise ProjectError("The project directory structure is incomplete.")
     return Project(root=root, config=config)

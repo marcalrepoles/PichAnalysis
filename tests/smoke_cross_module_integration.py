@@ -15,9 +15,9 @@ from pichanalysis.core.presence_analysis import build_presence_arguments
 from pichanalysis.core.proteomics_qc import QCParameters, run_proteomics_qc
 from pichanalysis.core.r_runtime import RRuntime
 from pichanalysis.ui.analyses_page import AnalysesPage
-from tests.smoke_differential_preparation import fixture_project
-from tests.test_cross_module_adapters import test_multi_module_offline_bridges_from_persisted_ids
-from tests.test_cross_module_navigation import test_legacy_mapping_never_borrows_latest
+from smoke_differential_preparation import fixture_project
+from test_cross_module_adapters import test_multi_module_offline_bridges_from_persisted_ids
+from test_cross_module_navigation import test_legacy_mapping_never_borrows_latest
 
 
 def smoke():

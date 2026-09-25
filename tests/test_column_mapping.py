@@ -74,7 +74,7 @@ def test_validation_duplicate_condition_replicate():
     columns = valid_columns()
     columns["LFQ Control copy"] = dict(columns["LFQ Control 1"])
     result = validate_mapping(columns)
-    assert any("mesma combinação" in error for error in result.errors)
+    assert any("same condition/replicate combination" in error for error in result.errors)
 
 
 def test_suggestions_choose_one_primary_identifier():

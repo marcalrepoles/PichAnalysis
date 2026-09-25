@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .resources import r_script, r_scripts_dir
 
 import json
 import shutil
@@ -113,7 +114,7 @@ def read_mitocarta_outputs(project:Project,run_id:str|None=None)->MitoCartaOutpu
 
 
 def run_mitocarta_analysis(project:Project,manager:DatabaseManager,runtime:RRuntime,*,run_id:str,parameters:MitoCartaParameters|None=None,script:Path|None=None,timeout:int=180)->MitoCartaOutputs:
-    arguments=prepare_mitocarta_arguments(project,manager,run_id=run_id,parameters=parameters);entry=script or Path(__file__).resolve().parents[3]/"r_scripts"/"06_mitocarta_analysis.R";result:RResult=runtime.run(entry,*arguments,timeout=timeout)
+    arguments=prepare_mitocarta_arguments(project,manager,run_id=run_id,parameters=parameters);entry=script or r_script("06_mitocarta_analysis.R");result:RResult=runtime.run(entry,*arguments,timeout=timeout)
     if result.returncode!=0:
         error_path=project.root/"analyses"/"MitoCarta"/"target_background_error.json"
         if error_path.is_file():

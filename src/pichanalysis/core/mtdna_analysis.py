@@ -3,6 +3,7 @@
 R alone computes frequencies, contingency tests, FDR and visualizations.
 """
 from __future__ import annotations
+from .resources import r_script, r_scripts_dir
 
 import json
 import re
@@ -229,7 +230,7 @@ def prepare_mtdna_run(project, manager, run_id, parameters=None):
     (run / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     (provenance / "parameters.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     (provenance / "mtdna_evidence_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    scripts = Path(__file__).resolve().parents[3] / "r_scripts"
+    scripts = r_scripts_dir()
     for source in (scripts / "10_mtdna_analysis.R", scripts / "lib/mtdna_analysis.R"):
         shutil.copy2(source, provenance / source.name)
     return run, provenance
@@ -256,7 +257,7 @@ def list_mtdna_runs(project):
 
 def run_mtdna_analysis(project, manager, runtime: RRuntime, *, run_id, parameters=None, script=None, timeout=300):
     run, provenance = prepare_mtdna_run(project, manager, run_id, parameters)
-    entry = script or Path(__file__).resolve().parents[3] / "r_scripts/10_mtdna_analysis.R"
+    entry = script or r_script("10_mtdna_analysis.R")
     try: result = runtime.run(entry, "--run", str(run), "--provenance", str(provenance), timeout=timeout)
     except RuntimeError as error: raise MtdnaRExecutionError(str(error)) from error
     if result.returncode: raise MtdnaRExecutionError((result.stderr or result.stdout or "Rscript failed.").strip())

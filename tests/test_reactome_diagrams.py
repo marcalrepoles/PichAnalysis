@@ -33,6 +33,25 @@ def write_core(root: Path) -> Path:
     return root
 
 
+def test_staging_snapshot_ids_remain_unique_when_clock_collides(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    from pichanalysis.core import reactome_database as module
+    from pichanalysis.core.reactome_database import ReactomeDatabase
+
+    class FrozenClock:
+        @staticmethod
+        def now(_timezone):
+            return datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(module, "datetime", FrozenClock)
+    database = ReactomeDatabase(tmp_path)
+    first = database.create_staging_snapshot()
+    second = database.create_staging_snapshot()
+    assert first != second
+    assert first.is_dir() and second.is_dir()
+    assert database.manifest(second)["snapshot_id"] == second.name
+
+
 def write_tar(path: Path, members: list[tuple[str, bytes]], *, kind=None, link="") -> Path:
     with tarfile.open(path, "w:gz") as bundle:
         for name, content in members:

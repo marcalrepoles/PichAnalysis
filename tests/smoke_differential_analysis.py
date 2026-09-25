@@ -10,7 +10,7 @@ from pichanalysis.core.differential_analysis import (
 from pichanalysis.core.differential_preparation import (
     PreparationParameters, run_differential_preparation)
 from pichanalysis.core.r_runtime import RRuntime
-from tests.smoke_differential_preparation import fixture_project
+from smoke_differential_preparation import fixture_project
 
 
 def smoke():

@@ -32,16 +32,16 @@ class MappingOutputs:
 
 def mapping_readiness(project: Project | None) -> AnalysisReadiness:
     if project is None:
-        return AnalysisReadiness(False, "Abra um projeto.")
+        return AnalysisReadiness(False, "Open a project.")
     if get_organism(project) is None:
-        return AnalysisReadiness(False, "Configure o organismo do projeto.")
+        return AnalysisReadiness(False, "Configure the project organism.")
     columns = project.config.get("columns", {})
     validation = validate_mapping(columns if isinstance(columns, dict) else {})
     if not validation.valid:
         return AnalysisReadiness(False, validation.errors[0])
     design = experimental_design(project)
     if not design["primary_identifier_column"] or not design["primary_identifier_type"]:
-        return AnalysisReadiness(False, "Configure um identificador principal.")
+        return AnalysisReadiness(False, "Configure a primary identifier.")
     if not project.config.get("input", {}).get("processed_file"):
         return AnalysisReadiness(False, "Import a table before mapping.")
     return AnalysisReadiness(True, "Ready to map and annotate.")
@@ -88,7 +88,7 @@ def read_mapping_outputs(project: Project) -> MappingOutputs:
 def export_result(source: Path, destination: Path) -> Path:
     source, destination = Path(source), Path(destination)
     if not source.is_file():
-        raise FileNotFoundError(f"Resultado não encontrado: {source}")
+        raise FileNotFoundError(f"Result not found: {source}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     return destination

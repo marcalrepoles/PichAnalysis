@@ -20,20 +20,20 @@ class GOPage(QWidget):
 
     def __init__(self) -> None:
         super().__init__(); self.project:Project|None=None; self.outputs:GOOutputs|None=None
-        self.target=QComboBox(); self.background=QComboBox(); self.manual_rows=QLineEdit(); self.manual_rows.setPlaceholderText("Linhas separadas por vírgula")
-        self.ontology=QComboBox(); self.ontology.addItem("Todos — BP, MF e CC",["BP","MF","CC"])
+        self.target=QComboBox(); self.background=QComboBox(); self.manual_rows=QLineEdit(); self.manual_rows.setPlaceholderText("Row numbers separated by commas")
+        self.ontology=QComboBox(); self.ontology.addItem("All — BP, MF, and CC",["BP","MF","CC"])
         for value,label in (("BP","BP — Biological Process"),("MF","MF — Molecular Function"),("CC","CC — Cellular Component")): self.ontology.addItem(label,[value])
-        self.evidence=QComboBox(); self.evidence.addItem("Todas as evidências","all"); self.evidence.addItem("Excluir IEA","exclude_iea"); self.evidence.addItem("Somente evidências experimentais","experimental")
+        self.evidence=QComboBox(); self.evidence.addItem("All evidence","all"); self.evidence.addItem("Exclude IEA","exclude_iea"); self.evidence.addItem("Experimental evidence only","experimental")
         self.fdr=QDoubleSpinBox(); self.fdr.setRange(.000001,1); self.fdr.setValue(.05); self.fdr.setDecimals(4)
         self.pvalue=QDoubleSpinBox(); self.pvalue.setRange(.000001,1); self.pvalue.setValue(1); self.pvalue.setDecimals(4)
         self.min_count=QSpinBox(); self.min_count.setRange(1,100000); self.min_count.setValue(3)
         self.top_n=QSpinBox(); self.top_n.setRange(1,200); self.top_n.setValue(20)
-        self.simplify=QCheckBox("Simplificar termos redundantes (preserva originais)"); self.simplify_cutoff=QDoubleSpinBox(); self.simplify_cutoff.setRange(.1,1); self.simplify_cutoff.setValue(.7)
-        form=QFormLayout(); form.addRow("1. Conjunto analisado",self.target); form.addRow("Seleção manual",self.manual_rows); form.addRow("2. Background",self.background); form.addRow("3. Ontologia",self.ontology); form.addRow("4. Evidências",self.evidence)
-        advanced=QGroupBox("5. Opções avançadas de enrichment"); advanced.setCheckable(True); advanced.setChecked(False); advanced_layout=QFormLayout(advanced)
-        advanced_layout.addRow("FDR cutoff",self.fdr); advanced_layout.addRow("p-value cutoff",self.pvalue); advanced_layout.addRow("Minimum gene count",self.min_count); advanced_layout.addRow("Top N",self.top_n); advanced_layout.addRow(self.simplify); advanced_layout.addRow("Cutoff de similaridade",self.simplify_cutoff)
-        self.explanation=QLabel("Frequência mostra quantas proteínas possuem cada anotação. Enriquecimento testa se uma anotação aparece mais do que o esperado em relação ao background. FDR reduz falsos positivos entre muitos testes."); self.explanation.setWordWrap(True)
-        self.readiness=QLabel("Abra um projeto."); self.run_button=QPushButton("6. Executar GO"); self.run_button.setEnabled(False); self.progress=QProgressBar(); self.progress.setRange(0,0); self.progress.hide()
+        self.simplify=QCheckBox("Simplify redundant terms (preserve originals)"); self.simplify_cutoff=QDoubleSpinBox(); self.simplify_cutoff.setRange(.1,1); self.simplify_cutoff.setValue(.7)
+        form=QFormLayout(); form.addRow("1. Analyzed set",self.target); form.addRow("Manual selection",self.manual_rows); form.addRow("2. Background",self.background); form.addRow("3. Ontology",self.ontology); form.addRow("4. Evidence",self.evidence)
+        advanced=QGroupBox("5. Advanced enrichment options"); advanced.setCheckable(True); advanced.setChecked(False); advanced_layout=QFormLayout(advanced)
+        advanced_layout.addRow("FDR cutoff",self.fdr); advanced_layout.addRow("p-value cutoff",self.pvalue); advanced_layout.addRow("Minimum gene count",self.min_count); advanced_layout.addRow("Top N",self.top_n); advanced_layout.addRow(self.simplify); advanced_layout.addRow("Similarity cutoff",self.simplify_cutoff)
+        self.explanation=QLabel("Frequency shows how many proteins have each annotation. Enrichment tests whether an annotation occurs more often than expected relative to the background. FDR reduces false positives across multiple tests."); self.explanation.setWordWrap(True)
+        self.readiness=QLabel("Open a project."); self.run_button=QPushButton("6. Run GO"); self.run_button.setEnabled(False); self.progress=QProgressBar(); self.progress.setRange(0,0); self.progress.hide()
         config=QWidget(); config_layout=QVBoxLayout(config); config_layout.addLayout(form); config_layout.addWidget(advanced); config_layout.addWidget(self.explanation); config_layout.addWidget(self.readiness); config_layout.addWidget(self.run_button); config_layout.addWidget(self.progress)
         self.source=QLabel("GO source for this run: —"); self.summary=QLabel("No results available."); self.summary.setWordWrap(True)
         self.table_picker=QComboBox(); self.table=QTableWidget(); self.detail=QPlainTextEdit(); self.detail.setReadOnly(True)
@@ -42,7 +42,7 @@ class GOPage(QWidget):
         results=QWidget(); rl=QVBoxLayout(results); rl.addWidget(self.source); rl.addWidget(self.summary); rl.addWidget(self.table_picker); rl.addWidget(self.table,1); rl.addWidget(self.detail); rl.addLayout(actions)
         self.graph_picker=QComboBox(); self.graph=QLabel("No graph available."); self.export_graph=QPushButton("Export graph")
         graphs=QWidget(); gl=QVBoxLayout(graphs); gl.addWidget(self.graph_picker); gl.addWidget(self.graph,1); gl.addWidget(self.export_graph)
-        self.history=QComboBox(); history=QWidget(); hl=QVBoxLayout(history); hl.addWidget(QLabel("Execuções preservadas em disco")); hl.addWidget(self.history); hl.addStretch()
+        self.history=QComboBox(); history=QWidget(); hl=QVBoxLayout(history); hl.addWidget(QLabel("Runs preserved on disk")); hl.addWidget(self.history); hl.addStretch()
         tabs=QTabWidget(); tabs.addTab(config,"Configuration"); tabs.addTab(results,"Results"); tabs.addTab(graphs,"Graphs"); tabs.addTab(history,"History")
         layout=QVBoxLayout(self); layout.addWidget(tabs)
         self.run_button.clicked.connect(self._emit_run); self.table_picker.currentIndexChanged.connect(self._load_table); self.table.currentCellChanged.connect(self._show_detail); self.graph_picker.currentIndexChanged.connect(self._show_graph)
@@ -61,14 +61,14 @@ class GOPage(QWidget):
     def _emit_run(self)->None:
         rows=[]
         try: rows=[int(x.strip()) for x in self.manual_rows.text().split(",") if x.strip()]
-        except ValueError: self.readiness.setText("Seleção manual deve conter números de linha."); return
+        except ValueError: self.readiness.setText("Manual selection must contain row numbers."); return
         self.run_requested.emit({"target_selection":self.target.currentData(),"background_selection":self.background.currentData(),"manual_rows":rows,"ontologies":self.ontology.currentData(),"evidence_filter":self.evidence.currentData(),"fdr_cutoff":self.fdr.value(),"p_cutoff":self.pvalue.value(),"min_count":self.min_count.value(),"top_n":self.top_n.value(),"simplify":self.simplify.isChecked(),"simplify_cutoff":self.simplify_cutoff.value()})
 
     def set_running(self,running:bool)->None:self.progress.setVisible(running);self.run_button.setEnabled(not running)
 
     def show_outputs(self,outputs:GOOutputs)->None:
-        self.outputs=outputs;m=outputs.metadata;self.source.setText(f"Fonte GO desta execução: {m.get('organism')} | {m.get('orgdb')} {m.get('orgdb_version')} | GO.db {m.get('go_db_version')} | Evidências: {m.get('evidence_filter')}")
-        significant=int(outputs.summary.get("significant_terms",pd.Series(dtype=int)).sum());self.summary.setText(f"Target: {m.get('target_count')} | Background: {m.get('background_count')} | Com GO: {m.get('annotated_count')} | Sem GO: {m.get('unannotated_count')} | Termos testados: {int(outputs.summary.get('terms_tested',pd.Series(dtype=int)).sum())} | Significativos: {significant}")
+        self.outputs=outputs;m=outputs.metadata;self.source.setText(f"GO source for this run: {m.get('organism')} | {m.get('orgdb')} {m.get('orgdb_version')} | GO.db {m.get('go_db_version')} | Evidence: {m.get('evidence_filter')}")
+        significant=int(outputs.summary.get("significant_terms",pd.Series(dtype=int)).sum());self.summary.setText(f"Target: {m.get('target_count')} | Background: {m.get('background_count')} | With GO: {m.get('annotated_count')} | Without GO: {m.get('unannotated_count')} | Terms tested: {int(outputs.summary.get('terms_tested',pd.Series(dtype=int)).sum())} | Significant: {significant}")
         self.table_picker.clear()
         for path in outputs.tables:self.table_picker.addItem(path.name,str(path))
         self.graph_picker.clear()
@@ -89,7 +89,7 @@ class GOPage(QWidget):
         if self.outputs and "input_id" in headers and self.table.item(row,headers.index("input_id")):
             protein=self.table.item(row,headers.index("input_id")).text();annotations=self.outputs.annotations
             related=annotations[annotations["input_id"].astype(str)==protein]
-            if len(related): lines.append("Termos da proteína:\n"+"\n".join(f"{item.ontology}: {item.GO_ID} — {item.GO_term}" for item in related.itertuples()))
+            if len(related): lines.append("Protein terms:\n"+"\n".join(f"{item.ontology}: {item.GO_ID} — {item.GO_term}" for item in related.itertuples()))
         self.detail.setPlainText("\n\n".join(lines))
 
     def _show_graph(self)->None:

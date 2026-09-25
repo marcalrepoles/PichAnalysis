@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .resources import r_script, r_scripts_dir
 
 import json
 import shutil
@@ -230,7 +231,7 @@ def read_reactome_outputs(project: Project, run_id: str | None = None) -> Reacto
 def run_reactome_analysis(project: Project, manager: DatabaseManager, runtime: RRuntime, *, run_id: str,
     parameters: ReactomeParameters | None = None, script: Path | None = None, timeout: int = 180) -> ReactomeOutputs:
     arguments = prepare_reactome_arguments(project, manager, run_id=run_id, parameters=parameters)
-    entry = script or Path(__file__).resolve().parents[3] / "r_scripts" / "05_reactome_analysis.R"
+    entry = script or r_script("05_reactome_analysis.R")
     result: RResult = runtime.run(entry, *arguments, timeout=timeout)
     if result.returncode != 0:
         error_path = project.root / "analyses" / "Reactome" / "target_background_error.json"

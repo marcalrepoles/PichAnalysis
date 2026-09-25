@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from .external_process import run_external
+
 
 @dataclass(frozen=True)
 class RResult:
@@ -26,11 +28,11 @@ def _version_key(path: Path) -> tuple[int, ...]:
 def discover_rscript(configured: str | None = None, *, platform: str | None = None,
                      program_files: str | None = None,
                      which: Callable[[str], str | None] = shutil.which) -> str | None:
+    if configured:
+        return str(Path(configured)) if Path(configured).is_file() else None
     in_path = which("Rscript")
     if in_path and Path(in_path).is_file():
         return str(Path(in_path))
-    if configured and Path(configured).is_file():
-        return str(Path(configured))
     current_platform = platform or sys.platform
     if current_platform.startswith("win"):
         root = Path(program_files or os.environ.get("ProgramFiles", r"C:\Program Files")) / "R"
@@ -63,8 +65,8 @@ class RRuntime:
     def run(self, script: Path, *arguments: str, timeout: int = 60) -> RResult:
         command = self.command(script, *arguments)
         try:
-            completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8",
-                errors="replace", timeout=timeout, check=False, shell=False)
+            completed = run_external(command, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=timeout, shell=False)
         except (OSError, subprocess.TimeoutExpired) as error:
             raise RuntimeError(f"Failed to run Rscript: {error}") from error
         return RResult(command, completed.returncode, completed.stdout, completed.stderr)
@@ -73,9 +75,9 @@ class RRuntime:
         if not self.executable:
             return None
         try:
-            completed = subprocess.run((self.executable, "--version"), capture_output=True,
+            completed = run_external((self.executable, "--version"), capture_output=True,
                 text=True, encoding="utf-8", errors="replace", timeout=10,
-                check=False, shell=False)
+                shell=False)
         except (OSError, subprocess.TimeoutExpired):
             return None
         output = (completed.stdout or completed.stderr).strip()

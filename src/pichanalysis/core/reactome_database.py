@@ -27,7 +27,14 @@ class ReactomeDatabase:
  def __init__(self,root:Path):
   self.root=Path(root)/"reactome"/"human";self.snapshots=self.root/"snapshots";self.active_pointer=self.root/"active_snapshot.json"
  def create_staging_snapshot(self)->Path:
-  sid=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ");snap=self.snapshots/sid;(snap/"raw").mkdir(parents=True);self._write_manifest(snap,{"database":"Reactome","organism_name":"Homo sapiens","tax_id":"9606","reactome_species_prefix":"R-HSA-","snapshot_id":sid,"release_version":"unknown","status":DatabaseState.INCOMPLETE,"download_started_at":_now(),"download_completed_at":None,"source":BASE_URL,"data_license":DATA_LICENSE,"files":[],"components":{"core":{"status":DatabaseState.INCOMPLETE}}});return snap
+  base=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+  for attempt in range(100):
+   sid=base if attempt==0 else f"{base}-{attempt}"
+   snap=self.snapshots/sid
+   try:(snap/"raw").mkdir(parents=True)
+   except FileExistsError:continue
+   self._write_manifest(snap,{"database":"Reactome","organism_name":"Homo sapiens","tax_id":"9606","reactome_species_prefix":"R-HSA-","snapshot_id":sid,"release_version":"unknown","status":DatabaseState.INCOMPLETE,"download_started_at":_now(),"download_completed_at":None,"source":BASE_URL,"data_license":DATA_LICENSE,"files":[],"components":{"core":{"status":DatabaseState.INCOMPLETE}}});return snap
+  raise RuntimeError("Unable to allocate a unique Reactome snapshot directory.")
  def create_diagram_staging(self)->Path:
   active=self.active_snapshot()
   if active is None:raise RuntimeError("Reactome Core Data must be installed before diagrams.")

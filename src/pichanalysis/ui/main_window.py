@@ -34,6 +34,8 @@ from ..core.presence_analysis import (
 )
 from ..core.project import Project, ProjectError, create_project, open_project
 from ..core.r_runtime import RRuntime
+from ..core.resources import r_script, r_scripts_dir
+from ..version import __version__
 from .analyses_page import AnalysesPage
 from .consolidated_report_page import ConsolidatedReportPage
 from .data_page import DataPage
@@ -49,13 +51,12 @@ from .project_page import ProjectPage
 from .scripts_page import ScriptsPage
 
 
-APPLICATION_ROOT = Path(__file__).resolve().parents[3]
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("PichAnalysis")
+        self.setWindowTitle(f"PichAnalysis {__version__}")
         self.resize(1100, 720)
         self.project: Project | None = None
         self.runtime = RRuntime()
@@ -81,7 +82,7 @@ class MainWindow(QMainWindow):
         self.report_page = ConsolidatedReportPage()
         self.analyses_page.proteomics_qc_page.runtime = self.runtime
         self.analyses_page.differential_analysis_page.runtime = self.runtime
-        self.scripts_page = ScriptsPage(APPLICATION_ROOT / "r_scripts", self.runtime)
+        self.scripts_page = ScriptsPage(r_scripts_dir(required=False), self.runtime)
         self.navigation = QListWidget()
         self.navigation.addItems(["Project", "Data", "Analyses", "Database Manager", "Reports", "Scripts / Logs"])
         self.navigation.setFixedWidth(170)
@@ -170,6 +171,9 @@ class MainWindow(QMainWindow):
             )
             event.ignore()
             return
+        for handler in tuple(self.logger.handlers):
+            handler.close()
+            self.logger.removeHandler(handler)
         event.accept()
 
     def _configure_log(self) -> None:
@@ -195,15 +199,15 @@ class MainWindow(QMainWindow):
             if (project.root / "mapping" / "latest_metadata.json").is_file():
                 self.analyses_page.show_outputs(read_mapping_outputs(project))
         except RuntimeError:
-            self.logger.exception("Não foi possível restaurar resultados de mapeamento")
+            self.logger.exception("Could not restore mapping results")
         try:
             if (project.root / "analyses" / "presence_absence" / "latest_metadata.json").is_file():
                 self.analyses_page.presence_page.show_outputs(read_presence_outputs(project))
         except RuntimeError:
-            self.logger.exception("Não foi possível restaurar presença/ausência")
+            self.logger.exception("Could not restore presence/absence results")
         try:
             if (project.root/"analyses"/"GO"/"latest_metadata.json").is_file(): self.analyses_page.go_page.show_outputs(read_go_outputs(project))
-        except RuntimeError: self.logger.exception("Não foi possível restaurar GO")
+        except RuntimeError: self.logger.exception("Could not restore GO results")
 
     def _restore_data(self) -> None:
         if not self.project:
@@ -216,6 +220,9 @@ class MainWindow(QMainWindow):
         try:
             processed = self.project.root / processed_name
             original = self.project.root / original_name
+            for required in (original, processed):
+                if not required.is_file():
+                    raise FileNotFoundError(f"Imported project artifact is missing: {required}")
             frame = pd.read_csv(processed, encoding="utf-8")
             result = ImportResult(
                 frame,
@@ -228,11 +235,12 @@ class MainWindow(QMainWindow):
             self.data_page.show_result(result, mapping)
             if mapping:
                 self.data_page.show_validation(validate_mapping(mapping))
-        except Exception:
-            self.logger.exception("Não foi possível restaurar os dados processados")
+        except Exception as error:
+            self.logger.exception("Could not restore imported data")
+            self.data_page.summary.setText(f"Could not restore imported data: {error}")
 
     def _new_project(self) -> None:
-        name, accepted = QInputDialog.getText(self, "Novo projeto", "Nome do projeto:")
+        name, accepted = QInputDialog.getText(self, "New project", "Project name:")
         if not accepted or not name.strip():
             return
         parent = QFileDialog.getExistingDirectory(self, "Choose the folder where the project will be created")
@@ -278,10 +286,10 @@ class MainWindow(QMainWindow):
             result = import_into_project(self.project, source, sheet)
             self.data_page.show_result(result, load_mapping(self.project))
             self.project_page.show_project(self.project)
-            self.logger.info("Importação concluída: %s", result.original_path.name)
+            self.logger.info("Import completed: %s", result.original_path.name)
             self.navigation.setCurrentRow(1)
         except (ImportError, ProjectError) as error:
-            self.logger.exception("Erro de importação")
+            self.logger.exception("Import error")
             QMessageBox.warning(self, "Import failed", str(error))
 
     def _save_mapping(self, columns: dict) -> None:
@@ -291,12 +299,12 @@ class MainWindow(QMainWindow):
             validation = save_mapping(self.project, columns)
             self.data_page.show_validation(validation)
             self.logger.info(
-                "Configuração de colunas salva: %s",
-                "válida" if validation.valid else "inválida",
+                "Column configuration saved: %s",
+                "valid" if validation.valid else "invalid",
             )
             self.analyses_page.set_project(self.project)
         except ProjectError as error:
-            self.logger.exception("Erro ao salvar configuração de colunas")
+            self.logger.exception("Error saving column configuration")
             QMessageBox.warning(self, "Configuration", str(error))
 
     def _save_organism(self, name: str, tax_id: str) -> None:
@@ -311,7 +319,7 @@ class MainWindow(QMainWindow):
                 return
         try:
             set_organism(self.project, name, tax_id)
-            self.logger.info("Organismo configurado: %s (%s)", name.strip(), tax_id.strip())
+            self.logger.info("Organism configured: %s (%s)", name.strip(), tax_id.strip())
             self.analyses_page.set_project(self.project)
         except (ValueError, ProjectError) as error:
             QMessageBox.warning(self, "Organism", str(error))
@@ -328,7 +336,7 @@ class MainWindow(QMainWindow):
         self.logger.info("Mapeamento iniciado run_id=%s organismo=%s tipo=%s cache=%s",
             run_id, self.project.config.get("organism_tax_id"),
             arguments[arguments.index("--id-type") + 1], not refresh)
-        worker = MappingWorker(self.runtime, APPLICATION_ROOT / "r_scripts" / "01_mapping_annotation.R", arguments)
+        worker = MappingWorker(self.runtime, r_script("01_mapping_annotation.R"), arguments)
         self.mapping_worker = worker
         self.analyses_page.set_running(True)
         worker.succeeded.connect(lambda stdout, stderr: self._mapping_finished(run_id, stdout, stderr))
@@ -379,10 +387,10 @@ class MainWindow(QMainWindow):
             arguments = build_presence_arguments(self.project, run_id=run_id, **parameters)
         except ValueError as error:
             QMessageBox.warning(self, "Presence / absence", str(error)); return
-        self.logger.info("Presença/ausência iniciada run_id=%s tipo=%s condições=%s threshold=%s zero_ausência=%s",
+        self.logger.info("Presence/absence started run_id=%s type=%s conditions=%s threshold=%s zero_absence=%s",
             run_id, parameters["quantification_type"], len(parameters["selected_conditions"]),
             parameters["threshold"], parameters["zero_is_missing"])
-        worker = MappingWorker(self.runtime, APPLICATION_ROOT / "r_scripts" / "02_presence_absence.R", arguments)
+        worker = MappingWorker(self.runtime, r_script("02_presence_absence.R"), arguments)
         self.presence_worker = worker; self.analyses_page.presence_page.set_running(True)
         worker.succeeded.connect(lambda stdout,stderr:self._presence_finished(run_id,stdout,stderr))
         worker.failed.connect(lambda message,stderr:self._presence_failed(run_id,message,stderr))
@@ -393,12 +401,12 @@ class MainWindow(QMainWindow):
         try:
             outputs=read_presence_outputs(self.project); self.analyses_page.presence_page.show_outputs(outputs)
             self.scripts_page.set_project_scripts(self.project.root / "scripts" / "runs")
-            self.logger.info("Presença/ausência finalizada run_id=%s entidades=%s exit_code=0",run_id,outputs.metadata.get("total_entities"))
+            self.logger.info("Presence/absence completed run_id=%s entities=%s exit_code=0",run_id,outputs.metadata.get("total_entities"))
         except RuntimeError as error: QMessageBox.warning(self,"Resultados",str(error))
 
     def _presence_failed(self, run_id: str, message: str, stderr: str) -> None:
         self.presence_worker=None; self.analyses_page.presence_page.set_running(False)
-        self.logger.error("Presença/ausência falhou run_id=%s: %s",run_id,message)
+        self.logger.error("Presence/absence failed run_id=%s: %s",run_id,message)
         self.scripts_page.result_view.setPlainText(stderr); QMessageBox.warning(self,"Analysis failed",message)
 
     def _export_presence(self, relative: str) -> None:
@@ -431,14 +439,14 @@ class MainWindow(QMainWindow):
                 except ValueError as second:QMessageBox.warning(self,"Gene Ontology",str(second));return
             else:QMessageBox.warning(self,"Gene Ontology",str(error));return
         self.logger.info("GO iniciado run_id=%s target=%s background=%s ontologias=%s",run_id,parameters["target_selection"],parameters["background_selection"],",".join(parameters["ontologies"]))
-        worker=MappingWorker(self.runtime,APPLICATION_ROOT/"r_scripts"/"03_go_analysis.R",arguments);self.go_worker=worker;self.analyses_page.go_page.set_running(True)
+        worker=MappingWorker(self.runtime,r_script("03_go_analysis.R"),arguments);self.go_worker=worker;self.analyses_page.go_page.set_running(True)
         worker.succeeded.connect(lambda stdout,stderr:self._go_finished(run_id,stdout,stderr));worker.failed.connect(lambda message,stderr:self._go_failed(run_id,message,stderr));worker.finished.connect(worker.deleteLater);worker.start()
 
     def _go_finished(self,run_id:str,stdout:str,stderr:str)->None:
         self.go_worker=None;self.analyses_page.go_page.set_running(False)
         try:
             outputs=read_go_outputs(self.project);self.analyses_page.go_page.show_outputs(outputs);self.scripts_page.set_project_scripts(self.project.root/"scripts"/"runs")
-            self.logger.info("GO finalizado run_id=%s anotadas=%s não_anotadas=%s exit_code=0",run_id,outputs.metadata.get("annotated_count"),outputs.metadata.get("unannotated_count"))
+            self.logger.info("GO completed run_id=%s annotated=%s unannotated=%s exit_code=0",run_id,outputs.metadata.get("annotated_count"),outputs.metadata.get("unannotated_count"))
         except RuntimeError as error:QMessageBox.warning(self,"Resultados GO",str(error))
 
     def _go_failed(self,run_id:str,message:str,stderr:str)->None:
@@ -459,7 +467,7 @@ class MainWindow(QMainWindow):
         run_id=new_run_id()
         try:arguments=prepare_kegg_arguments(self.project,self.database_manager_page.manager,run_id=run_id,allow_target_outside_background=allow_target_outside_background,**parameters)
         except ValueError as error:QMessageBox.warning(self,"KEGG Pathways",str(error));return
-        worker=MappingWorker(self.runtime,APPLICATION_ROOT/"r_scripts"/"04_kegg_analysis.R",arguments);self.kegg_worker=worker;self.analyses_page.kegg_page.set_running(True)
+        worker=MappingWorker(self.runtime,r_script("04_kegg_analysis.R"),arguments);self.kegg_worker=worker;self.analyses_page.kegg_page.set_running(True)
         worker.succeeded.connect(lambda stdout,stderr:self._kegg_finished(run_id));worker.failed.connect(lambda message,stderr:self._kegg_failed(message,stderr,parameters));worker.finished.connect(worker.deleteLater);worker.start()
     def _kegg_finished(self,run_id:str)->None:
         self.kegg_worker=None;self.analyses_page.kegg_page.set_running(False)
@@ -691,7 +699,7 @@ class MainWindow(QMainWindow):
         box.exec()
         if box.clickedButton() == proceed:self._run_mtdna(parameters,True)
     def _test_r(self) -> None:
-        script = APPLICATION_ROOT / "r_scripts" / "00_runtime_test.R"
+        script = r_script("00_runtime_test.R")
         output_dir = self.project.root / "logs" if self.project else Path(tempfile.gettempdir())
         output = output_dir / "r_runtime_test.txt"
         try:
@@ -700,7 +708,7 @@ class MainWindow(QMainWindow):
             if result.returncode != 0:
                 raise RuntimeError(result.stderr or "Rscript exited with an error.")
             self.scripts_page.result_view.setPlainText(detail)
-            self.logger.info("Teste do R concluído")
+            self.logger.info("R test completed")
         except (RuntimeError, OSError) as error:
             self.logger.exception("Teste do R falhou")
             QMessageBox.warning(self, "Teste do R", str(error))

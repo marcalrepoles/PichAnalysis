@@ -15,7 +15,7 @@ raw_dir <- file.path(output_root, "raw", parameters$`run-id`)
 uniprot_raw <- file.path(raw_dir, "uniprot")
 ncbi_raw <- file.path(raw_dir, "ncbi")
 snapshot_dir <- file.path(parameters$project, "scripts", "runs", paste0(parameters$`run-id`, "_mapping_annotation"))
-if (dir.exists(raw_dir) || dir.exists(snapshot_dir)) stop("run_id já existe; snapshots não podem ser sobrescritos: ", parameters$`run-id`)
+if (dir.exists(raw_dir) || dir.exists(snapshot_dir)) stop("run_id already exists; snapshots cannot be overwritten: ", parameters$`run-id`)
 for (path in c(tables_dir, uniprot_raw, ncbi_raw, snapshot_dir)) dir.create(path, recursive=TRUE, showWarnings=FALSE)
 
 file.copy(script_path, file.path(snapshot_dir, basename(script_path)), overwrite=FALSE)

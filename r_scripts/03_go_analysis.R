@@ -1,15 +1,15 @@
 args_all<-commandArgs(trailingOnly=FALSE);script_path<-normalizePath(sub("^--file=","",args_all[grepl("^--file=",args_all)]),winslash="/",mustWork=TRUE)
 script_root<-dirname(script_path);source(file.path(script_root,"lib","common.R"));source(file.path(script_root,"lib","go_analysis.R"))
 required_packages<-c("AnnotationDbi","GO.db","ggplot2","openxlsx","jsonlite","readr")
-missing<-required_packages[!vapply(required_packages,requireNamespace,logical(1),quietly=TRUE)];if(length(missing))stop("Pacotes R ausentes: ",paste(missing,collapse=", "))
+missing<-required_packages[!vapply(required_packages,requireNamespace,logical(1),quietly=TRUE)];if(length(missing))stop("Missing R packages: ",paste(missing,collapse=", "))
 required_args<-c("input","catalog","output","project","target-file","background-file","organism","tax-id","ontologies","evidence-filter","fdr-cutoff","p-cutoff","min-count","top-n","simplify","simplify-cutoff","run-id","target-name","background-name","outside-count")
 p<-parse_arguments(commandArgs(trailingOnly=TRUE),required_args);started<-format(Sys.time(),tz="UTC",usetz=TRUE)
-orgdb_name<-if(p$`tax-id`=="9606")"org.Hs.eg.db"else if(p$`tax-id`=="10090")"org.Mm.eg.db"else stop("GO local não configurado para tax_id ",p$`tax-id`)
-if(!requireNamespace(orgdb_name,quietly=TRUE))stop("Pacote R ausente: ",orgdb_name)
+orgdb_name<-if(p$`tax-id`=="9606")"org.Hs.eg.db"else if(p$`tax-id`=="10090")"org.Mm.eg.db"else stop("Local GO is not configured for tax_id ",p$`tax-id`)
+if(!requireNamespace(orgdb_name,quietly=TRUE))stop("Missing R package: ",orgdb_name)
 suppressPackageStartupMessages(library(orgdb_name,character.only=TRUE));orgdb<-get(orgdb_name)
 ontologies<-unlist(jsonlite::fromJSON(p$ontologies));root<-normalizePath(p$output,winslash="/",mustWork=FALSE)
 run_root<-file.path(root,"runs",p$`run-id`);snapshot<-file.path(p$project,"scripts","runs",paste0(p$`run-id`,"_go_analysis"))
-if(dir.exists(run_root)||dir.exists(snapshot))stop("run_id GO já existe.")
+if(dir.exists(run_root)||dir.exists(snapshot))stop("GO run_id already exists.")
 run_ann<-file.path(run_root,"annotation");run_freq<-file.path(run_root,"frequency");run_enrich<-file.path(run_root,"enrichment");run_graphs<-file.path(run_root,"graphs")
 for(path in c(run_ann,run_freq,run_enrich,run_graphs,snapshot))dir.create(path,recursive=TRUE,showWarnings=FALSE)
 file.copy(script_path,file.path(snapshot,basename(script_path)),overwrite=FALSE);dir.create(file.path(snapshot,"lib"),showWarnings=FALSE)
@@ -38,10 +38,10 @@ for(ontology in ontologies){
   summaries[[ontology]]<-data.frame(ontology=ontology,annotated_proteins=length(unique(ann$entity_id)),terms_tested=nrow(enrichment),significant_terms=nrow(significant))
   tables_for_book[[paste(ontology,"frequency")]]<-frequency;tables_for_book[[paste(ontology,"enrichment")]]<-enrichment
   topn<-as.integer(p$`top-n`)
-  if(nrow(frequency)){plotdata<-head(frequency,topn);q<-ggplot2::ggplot(plotdata,ggplot2::aes(reorder(Description,Protein_count),Protein_count))+ggplot2::geom_col(fill="#2563EB")+ggplot2::coord_flip()+ggplot2::labs(x="Termo GO",y="Número de proteínas",title=paste("Frequência GO",ontology,"(não é enrichment)"))+ggplot2::theme_minimal();save_plot(q,paste0("go_",tolower(ontology),"_frequency"))}
+  if(nrow(frequency)){plotdata<-head(frequency,topn);q<-ggplot2::ggplot(plotdata,ggplot2::aes(reorder(Description,Protein_count),Protein_count))+ggplot2::geom_col(fill="#2563EB")+ggplot2::coord_flip()+ggplot2::labs(x="GO term",y="Number of proteins",title=paste("GO frequency",ontology,"(not enrichment)"))+ggplot2::theme_minimal();save_plot(q,paste0("go_",tolower(ontology),"_frequency"))}
   if(nrow(significant)){plotdata<-head(significant,topn);ratio<-vapply(strsplit(plotdata$GeneRatio,"/",fixed=TRUE),function(x)as.numeric(x[1])/as.numeric(x[2]),numeric(1));plotdata$ratio<-ratio
-    q<-ggplot2::ggplot(plotdata,ggplot2::aes(ratio,reorder(Description,ratio),size=Count,color=p.adjust))+ggplot2::geom_point()+ggplot2::scale_color_viridis_c(direction=-1)+ggplot2::labs(x="GeneRatio",y="Termo GO",title=paste("GO enrichment",ontology),color="FDR (BH)")+ggplot2::theme_minimal();save_plot(q,paste0("go_",tolower(ontology),"_enrichment_dot"))
-    plotdata$score<--log10(pmax(plotdata$p.adjust,.Machine$double.xmin));q2<-ggplot2::ggplot(plotdata,ggplot2::aes(reorder(Description,score),score))+ggplot2::geom_col(fill="#7C3AED")+ggplot2::coord_flip()+ggplot2::labs(x="Termo GO",y="-log10(FDR BH)",title=paste("GO enrichment",ontology))+ggplot2::theme_minimal();save_plot(q2,paste0("go_",tolower(ontology),"_enrichment_bar"))}
+    q<-ggplot2::ggplot(plotdata,ggplot2::aes(ratio,reorder(Description,ratio),size=Count,color=p.adjust))+ggplot2::geom_point()+ggplot2::scale_color_viridis_c(direction=-1)+ggplot2::labs(x="GeneRatio",y="GO term",title=paste("GO enrichment",ontology),color="FDR (BH)")+ggplot2::theme_minimal();save_plot(q,paste0("go_",tolower(ontology),"_enrichment_dot"))
+    plotdata$score<--log10(pmax(plotdata$p.adjust,.Machine$double.xmin));q2<-ggplot2::ggplot(plotdata,ggplot2::aes(reorder(Description,score),score))+ggplot2::geom_col(fill="#7C3AED")+ggplot2::coord_flip()+ggplot2::labs(x="GO term",y="-log10(FDR BH)",title=paste("GO enrichment",ontology))+ggplot2::theme_minimal();save_plot(q2,paste0("go_",tolower(ontology),"_enrichment_bar"))}
 }
 summary<-do.call(rbind,summaries);summary$target_proteins<-nrow(target);summary$unannotated_proteins<-nrow(unannotated);summary$background_proteins<-nrow(background)
 readr::write_csv(summary,file.path(run_root,"summary.csv"));tables_for_book<-c(list(Summary=summary),tables_for_book)

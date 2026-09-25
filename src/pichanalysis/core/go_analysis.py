@@ -34,15 +34,15 @@ class GOOutputs:
 
 def go_readiness(project: Project | None) -> GOReadiness:
     if project is None:
-        return GOReadiness(False, "Abra um projeto.")
+        return GOReadiness(False, "Open a project.")
     organism = get_organism(project)
     if organism is None:
-        return GOReadiness(False, "Configure o organismo do projeto.")
+        return GOReadiness(False, "Configure the project organism.")
     if organism.tax_id not in SUPPORTED_ORGDB:
-        return GOReadiness(False, "GO local ainda não configurado para este organismo.")
+        return GOReadiness(False, "Local GO is not configured for this organism yet.")
     if not (project.root / "mapping" / "tables" / "protein_catalog.csv").is_file():
-        return GOReadiness(False, "Execute o mapeamento para obter IDs utilizáveis pelo GO.")
-    return GOReadiness(True, "Pronto para análise GO local.")
+        return GOReadiness(False, "Run mapping to obtain IDs usable by GO.")
+    return GOReadiness(True, "Ready for local GO analysis.")
 
 
 def _catalog(project: Project) -> pd.DataFrame:
@@ -50,13 +50,13 @@ def _catalog(project: Project) -> pd.DataFrame:
 
 
 def available_sets(project: Project) -> dict[str, str]:
-    sets = {"all_experiment": "Todas as proteínas do experimento", "mapped": "Proteínas mapeadas"}
+    sets = {"all_experiment": "All experiment proteins", "mapped": "Mapped proteins"}
     classification_path = project.root / "analyses" / "presence_absence" / "tables" / "classification.csv"
     if classification_path.is_file():
         frame = pd.read_csv(classification_path)
         for value in sorted(frame.get("classification", pd.Series(dtype=str)).dropna().unique()):
             sets[f"class:{value}"] = str(value)
-    sets["manual"] = "Seleção manual"
+    sets["manual"] = "Manual selection"
     return sets
 
 
@@ -73,7 +73,7 @@ def select_set(project: Project, selection: str, manual_rows: list[int] | None =
         classification = pd.read_csv(project.root / "analyses" / "presence_absence" / "tables" / "classification.csv")
         rows = classification.loc[classification["classification"] == selection[6:], "source_row"]
         return catalog[catalog["source_row"].isin(rows)].copy()
-    raise ValueError("Conjunto GO desconhecido.")
+    raise ValueError("Unknown GO set.")
 
 
 def entity_keys(frame: pd.DataFrame) -> set[str]:
@@ -93,20 +93,20 @@ def prepare_go_arguments(project: Project, *, target_selection: str, background_
     if not state.ready:
         raise ValueError(state.reason)
     if not ontologies or any(item not in {"BP", "MF", "CC"} for item in ontologies):
-        raise ValueError("Selecione BP, MF e/ou CC.")
+        raise ValueError("Select BP, MF, and/or CC.")
     if evidence_filter not in EVIDENCE_FILTERS:
-        raise ValueError("Filtro de evidência inválido.")
+        raise ValueError("Invalid evidence filter.")
     target = select_set(project, target_selection, manual_rows)
     background = select_set(project, background_selection, manual_rows)
     target_keys, background_keys = entity_keys(target), entity_keys(background)
     outside = target_keys - background_keys
     if outside and not allow_target_outside_background:
-        raise ValueError(f"{len(outside)} identificador(es) do conjunto não pertencem ao background selecionado.")
+        raise ValueError(f"{len(outside)} set identifier(s) are outside the selected background.")
     if outside:
         target = target[target.apply(lambda row: bool(entity_keys(pd.DataFrame([row])) & background_keys), axis=1)]
     raw = project.root / "analyses" / "GO" / "raw" / run_id
     if raw.exists():
-        raise ValueError("run_id GO já existe.")
+        raise ValueError("GO run_id already exists.")
     raw.mkdir(parents=True)
     target_file, background_file = raw / "target.csv", raw / "background.csv"
     target.to_csv(target_file, index=False); background.to_csv(background_file, index=False)
@@ -133,7 +133,7 @@ def read_go_outputs(project: Project) -> GOOutputs:
             json.loads((root / "latest_metadata.json").read_text(encoding="utf-8")),
             tuple(sorted(root.glob("**/*.csv"))), tuple(sorted((root / "graphs").glob("*.png"))))
     except (OSError, ValueError, json.JSONDecodeError) as error:
-        raise RuntimeError(f"Resultados GO inválidos: {error}") from error
+        raise RuntimeError(f"Invalid GO results: {error}") from error
 
 
 def list_go_runs(project: Project) -> list[str]:

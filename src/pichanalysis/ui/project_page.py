@@ -8,7 +8,7 @@ from ..core.project import Project
 class ProjectPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.new_button = QPushButton("Novo projeto")
+        self.new_button = QPushButton("New project")
         self.open_button = QPushButton("Open existing project")
         self.folder_button = QPushButton("Open project folder")
         self.folder_button.setEnabled(False)

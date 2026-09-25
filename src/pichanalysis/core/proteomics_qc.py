@@ -3,6 +3,7 @@
 Python validates and freezes inputs. Scientific metrics and plots are computed in R.
 """
 from __future__ import annotations
+from .resources import r_script, r_scripts_dir
 
 import hashlib
 import json
@@ -209,7 +210,7 @@ def prepare_qc_run(project, run_id, parameters: QCParameters):
     for path in (run / "input/parameters.json", provenance / "parameters.json"):
         path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     shutil.copy2(run / "input/sample_metadata.csv", provenance / "sample_metadata.csv")
-    scripts = Path(__file__).resolve().parents[3] / "r_scripts"
+    scripts = r_scripts_dir()
     for source in (scripts / "11_proteomics_qc.R", scripts / "lib/proteomics_qc.R"):
         shutil.copy2(source, provenance / source.name)
     return run, provenance
@@ -241,7 +242,7 @@ def load_run(project, run_id):
 def run_proteomics_qc(project, runtime: RRuntime, *, run_id, parameters: QCParameters,
                       script=None, timeout=300):
     run, provenance = prepare_qc_run(project, run_id, parameters)
-    entry = script or Path(__file__).resolve().parents[3] / "r_scripts/11_proteomics_qc.R"
+    entry = script or r_script("11_proteomics_qc.R")
     try: result = runtime.run(entry, "--run", str(run), "--provenance", str(provenance), timeout=timeout)
     except RuntimeError as error: raise QCRExecutionError(str(error)) from error
     if result.returncode: raise QCRExecutionError((result.stderr or result.stdout or "Rscript failed.").strip())

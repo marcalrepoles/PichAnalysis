@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+release_artifacts/
 *.egg-info/
 .DS_Store
 Thumbs.db

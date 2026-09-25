@@ -4,25 +4,25 @@ required_packages <- c("httr2", "jsonlite", "readr", "DBI", "RSQLite", "openxlsx
 
 check_dependencies <- function() {
   missing <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
-  if (length(missing)) stop("Pacotes R ausentes: ", paste(missing, collapse = ", "))
+  if (length(missing)) stop("Missing R packages: ", paste(missing, collapse = ", "))
 }
 
 parse_arguments <- function(args, required = NULL) {
-  if (length(args) %% 2 != 0) stop("Argumentos devem usar pares --nome valor.")
+  if (length(args) %% 2 != 0) stop("Arguments must use --name value pairs.")
   result <- list()
   for (i in seq(1, length(args), by = 2)) {
     key <- sub("^--", "", args[[i]])
-    if (key == args[[i]] || !nzchar(key)) stop("Argumento inválido: ", args[[i]])
+    if (key == args[[i]] || !nzchar(key)) stop("Invalid argument: ", args[[i]])
     result[[key]] <- args[[i + 1]]
   }
   if (is.null(required)) required <- c("input", "output", "id-column", "id-type", "tax-id", "organism", "cache", "refresh", "run-id", "project")
   absent <- required[!required %in% names(result)]
-  if (length(absent)) stop("Argumentos ausentes: ", paste(absent, collapse = ", "))
+  if (length(absent)) stop("Missing arguments: ", paste(absent, collapse = ", "))
   result
 }
 
 expand_identifiers <- function(input, id_column, id_type) {
-  if (!id_column %in% names(input)) stop("Coluna identificadora não encontrada: ", id_column)
+  if (!id_column %in% names(input)) stop("Identifier column not found: ", id_column)
   rows <- list()
   for (i in seq_len(nrow(input))) {
     original <- input[[id_column]][[i]]

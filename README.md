@@ -4,6 +4,15 @@ PichAnalysis is a cross-platform desktop application for reproducible proteomics
 projects. It creates and opens projects, imports tabular data, maps identifiers,
 and provides local Presence/Absence, Gene Ontology, KEGG, and Reactome analyses.
 
+## Windows release 0.1.0
+
+The Windows x86_64 installer and portable ZIP are generated in ignored `release_artifacts/`.
+The installer bundles Python/PySide6 but not R or scientific databases. R is an
+external dependency for scientific analyses; see [Windows installation](docs/installation-windows.md),
+[release notes](docs/releases/0.1.0.md), and [runtime dependencies](docs/runtime-dependencies.md).
+macOS build configuration is prepared, but a macOS build has not been produced or
+validated on macOS hardware.
+
 ## Architecture
 
 The PySide6 interface is separated from project and import logic. Python manages
@@ -12,8 +21,8 @@ a central `Rscript` adapter. Application-owned R scripts live in `r_scripts/`.
 
 ## Setup
 
-Python 3.10 or newer is required. R is optional for the current data workflow,
-but will be required by future scientific analyses.
+For source development, use Python 3.10 or newer. The Windows installer includes
+Python. R is optional for opening the app but required for R-dependent analyses.
 
 Windows PowerShell:
 
@@ -295,3 +304,7 @@ Use **Explore across analyses...** from a selected result row in a loaded analys
 The Reports page builds an offline, presentation-only bundle from explicitly selected persisted runs and CSV/PNG artifacts. Select runs and artifacts, order sections, add optional user notes, and generate both HTML and PDF in the background. Reports preserve each source run ID, input lineage and historical database snapshot; the overview warns when selected runs have multiple input lineages. Tables show a bounded preview, with complete selected files copied as attachments when enabled. No analysis, remapping, statistical recalculation, network expansion or automated biological interpretation is performed.
 
 Bundles are stored under `reports/consolidated/runs/<report_id>` with `report.html`, `report.pdf`, configuration, SHA-256 manifest, CSV source/artifact indexes, figures and optional attachments. History validates hashes before opening or exporting. Missing or altered artifacts are refused; incomplete staging directories remain marked Incomplete for audit. Historical Mapping runs without frozen mapping tables cannot borrow the latest catalog.
+
+### Release readiness
+
+Before packaging, run the read-only `pichanalysis.core.release_preflight.run_preflight()` check. It reports Python imports, Rscript, R package versions, critical R scripts, and writable temp/project locations without installing anything. See [the hardening audit](docs/final-hardening-review.md), [runtime dependencies](docs/runtime-dependencies.md), and [release resources](docs/release-resources.md).

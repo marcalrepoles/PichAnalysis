@@ -1,0 +1,14 @@
+PichAnalysis 0.1.0 — third-party component inventory
+
+The Windows application bundle contains a Python 3.11 runtime, PySide6/Qt,
+pandas, numpy, openpyxl, xlrd, platformdirs, their collected runtime
+dependencies, and the PyInstaller bootloader/runtime. Exact build-environment
+versions and artifact hashes are recorded in release_manifest.json. This is
+an inventory, not a legal-compliance certification or a replacement for the
+license texts supplied by the respective upstream projects.
+
+Scientific R, R packages and scientific database snapshots are not bundled.
+The current source repository has no project LICENSE file; no project license
+or copyright holder is asserted here. Review all upstream license terms
+before redistribution, especially Qt/PySide6, the Python runtime, the
+PyInstaller bootloader and any transitive binary libraries.

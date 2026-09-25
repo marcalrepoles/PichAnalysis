@@ -3,6 +3,7 @@
 Scientific graph measures are computed by r_scripts/08_string_analysis.R.
 """
 from __future__ import annotations
+from .resources import r_script, r_scripts_dir
 
 import csv
 import json
@@ -286,7 +287,7 @@ def prepare_string_run(project, manager, run_id, parameters=None):
     (run/"metadata.json").write_text(json.dumps(metadata,indent=2),encoding="utf-8")
     (provenance/"string_manifest.json").write_text(json.dumps(manifest,indent=2),encoding="utf-8")
     (provenance/"parameters.json").write_text(json.dumps(metadata,indent=2),encoding="utf-8")
-    scripts = Path(__file__).resolve().parents[3]/"r_scripts"
+    scripts = r_scripts_dir()
     for source in (scripts/"08_string_analysis.R", scripts/"lib/string_analysis.R"):
         shutil.copy2(source,provenance/source.name)
     return run, provenance
@@ -310,7 +311,7 @@ def list_string_runs(project):
 
 def run_string_analysis(project, manager, runtime:RRuntime, *, run_id, parameters=None, script=None, timeout=600):
     run, provenance = prepare_string_run(project,manager,run_id,parameters)
-    entry = script or Path(__file__).resolve().parents[3]/"r_scripts/08_string_analysis.R"
+    entry = script or r_script("08_string_analysis.R")
     try: result = runtime.run(entry,"--run",str(run),"--provenance",str(provenance),timeout=timeout)
     except RuntimeError as exc: raise StringRExecutionError("R execution failure: "+str(exc)) from exc
     if result.returncode:

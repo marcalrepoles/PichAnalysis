@@ -3,6 +3,7 @@
 No model fitting or differential statistics are performed here.
 """
 from __future__ import annotations
+from .resources import r_script, r_scripts_dir
 
 import hashlib
 import json
@@ -253,7 +254,7 @@ def prepare_run(project, run_id, parameters: PreparationParameters):
     for destination in (run / "input/parameters.json", provenance / "parameters.json"):
         destination.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     shutil.copy2(run / "input/sample_metadata.csv", provenance / "sample_metadata.csv")
-    scripts = Path(__file__).resolve().parents[3] / "r_scripts"
+    scripts = r_scripts_dir()
     for source in (scripts / "12_differential_preparation.R", scripts / "lib/differential_preparation.R"):
         shutil.copy2(source, provenance / source.name)
     return run, provenance
@@ -287,7 +288,7 @@ def load_run(project, run_id):
 def run_differential_preparation(project, runtime: RRuntime, *, run_id,
                                  parameters: PreparationParameters, script=None, timeout=300):
     run, provenance = prepare_run(project, run_id, parameters)
-    entry = script or Path(__file__).resolve().parents[3] / "r_scripts/12_differential_preparation.R"
+    entry = script or r_script("12_differential_preparation.R")
     try:
         result = runtime.run(entry, "--run", str(run), "--provenance", str(provenance), timeout=timeout)
     except RuntimeError as error:

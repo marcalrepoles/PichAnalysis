@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .resources import r_script, r_scripts_dir
 
 import json
 from dataclasses import dataclass
@@ -113,7 +114,7 @@ def read_interpro_pfam_outputs(project:Project,run_id:str|None=None):
 
 
 def run_interpro_pfam_analysis(project,manager,runtime:RRuntime,*,run_id,parameters=None,script=None,timeout=180):
-    arguments=prepare_interpro_pfam_arguments(project,manager,run_id=run_id,parameters=parameters);entry=script or Path(__file__).resolve().parents[3]/"r_scripts/07_interpro_pfam_analysis.R";result:RResult=runtime.run(entry,*arguments,timeout=timeout)
+    arguments=prepare_interpro_pfam_arguments(project,manager,run_id=run_id,parameters=parameters);entry=script or r_script("07_interpro_pfam_analysis.R");result:RResult=runtime.run(entry,*arguments,timeout=timeout)
     if result.returncode!=0:
         error=project.root/"analyses/InterPro_Pfam/target_background_error.json"
         if error.is_file():

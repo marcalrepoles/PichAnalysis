@@ -45,24 +45,24 @@ def quantification_types(project: Project) -> list[str]:
 
 def presence_readiness(project: Project | None, quantification_type: str | None = None) -> PresenceReadiness:
     if project is None:
-        return PresenceReadiness(False, "Abra um projeto.")
+        return PresenceReadiness(False, "Open a project.")
     design = experimental_design(project)
     if not design["primary_identifier_column"]:
-        return PresenceReadiness(False, "Configure um identificador principal.")
+        return PresenceReadiness(False, "Configure a primary identifier.")
     columns = quantitative_columns(project)
     if not columns:
-        return PresenceReadiness(False, "Configure ao menos uma coluna Quantification.")
+        return PresenceReadiness(False, "Configure at least one Quantification column.")
     if any(not item["condition"] for item in columns):
-        return PresenceReadiness(False, "Todas as colunas quantitativas precisam de uma condição.")
+        return PresenceReadiness(False, "All quantitative columns need a condition.")
     selected = quantification_type or (quantification_types(project)[0] if len(quantification_types(project)) == 1 else None)
     if not selected:
-        return PresenceReadiness(False, "Escolha o tipo de quantificação.")
+        return PresenceReadiness(False, "Choose a quantification type.")
     chosen = [item for item in columns if item["quantification_type"] == selected]
     if not chosen:
-        return PresenceReadiness(False, "O tipo de quantificação selecionado não possui colunas.")
+        return PresenceReadiness(False, "The selected quantification type has no columns.")
     if not project.config.get("input", {}).get("processed_file"):
-        return PresenceReadiness(False, "Importe uma tabela antes da análise.")
-    return PresenceReadiness(True, "Pronto para executar presença/ausência.")
+        return PresenceReadiness(False, "Import a table before analysis.")
+    return PresenceReadiness(True, "Ready to run presence/absence analysis.")
 
 
 def replicate_counts(project: Project, quantification_type: str) -> dict[str, int]:
@@ -86,11 +86,11 @@ def build_presence_arguments(project: Project, *, quantification_type: str,
         raise ValueError(state.reason)
     available = replicate_counts(project, quantification_type)
     if not selected_conditions or any(item not in available for item in selected_conditions):
-        raise ValueError("Selecione ao menos uma condição válida.")
+        raise ValueError("Select at least one valid condition.")
     if rule_mode not in {"count", "fraction"}:
-        raise ValueError("Modo de reprodutibilidade inválido.")
+        raise ValueError("Invalid reproducibility mode.")
     if rule_value <= 0 or (rule_mode == "fraction" and rule_value > 1):
-        raise ValueError("Critério de reprodutibilidade inválido.")
+        raise ValueError("Invalid reproducibility criterion.")
     design = experimental_design(project)
     column_map = [item for item in quantitative_columns(project)
                   if item["quantification_type"] == quantification_type and item["condition"] in selected_conditions]
@@ -117,7 +117,7 @@ def read_presence_outputs(project: Project) -> PresenceOutputs:
             pd.read_csv(tables / "condition_summary.csv"), metadata,
             tuple(sorted((root / "graphs").glob("*.png"))))
     except (OSError, ValueError, json.JSONDecodeError) as error:
-        raise RuntimeError(f"Resultados de presença/ausência inválidos: {error}") from error
+        raise RuntimeError(f"Invalid presence/absence results: {error}") from error
 
 
 def list_presence_runs(project: Project) -> list[str]:

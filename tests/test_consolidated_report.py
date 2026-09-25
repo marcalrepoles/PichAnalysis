@@ -5,7 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtPdf import QPdfDocument
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
 
@@ -55,6 +56,23 @@ def test_explicit_offline_report_and_history(report_fixture):
     second = generate_report(project, config, adapters)
     assert first != second
     assert (first / "report.pdf").read_bytes().startswith(b"%PDF-")
+    pdf_document = QPdfDocument()
+    assert pdf_document.load(str(first / "report.pdf")) == QPdfDocument.Error.None_
+    has_original_blue_figure = False
+    for page_number in range(pdf_document.pageCount()):
+        page_image = pdf_document.render(page_number, QSize(600, 850))
+        for y in range(0, page_image.height(), 3):
+            for x in range(0, page_image.width(), 3):
+                color = page_image.pixelColor(x, y)
+                if color.blue() > 180 and color.red() < 40 and color.green() < 40:
+                    has_original_blue_figure = True
+                    break
+            if has_original_blue_figure:
+                break
+        if has_original_blue_figure:
+            break
+    assert has_original_blue_figure, "A selected figure must render in the PDF"
+    pdf_document.close()
     assert (first / "report.html").is_file()
     manifest = json.loads((first / "report_manifest.json").read_text())
     assert manifest["status"] == "Ready"

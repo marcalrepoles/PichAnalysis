@@ -88,7 +88,7 @@ def _ratio(values: Iterable[str], pattern: re.Pattern[str], split: bool = False)
 def detect_identifier(column_name: str, series: pd.Series) -> DetectionResult:
     values = _values(series)
     if not values:
-        return DetectionResult(IdentifierType.UNKNOWN, 0.0, 0, 0, "Coluna sem valores para avaliar.")
+        return DetectionResult(IdentifierType.UNKNOWN, 0.0, 0, 0, "Column has no values to evaluate.")
 
     header = column_name.casefold()
     candidates: list[tuple[IdentifierType, re.Pattern[str], bool, tuple[str, ...]]] = [
@@ -103,7 +103,7 @@ def detect_identifier(column_name: str, series: pd.Series) -> DetectionResult:
         ratio = matched / tested
         header_bonus = 0.08 if any(hint in header for hint in hints) else 0.0
         confidence = min(1.0, ratio * 0.92 + header_bonus)
-        reason = f"{matched} de {tested} valores avaliados são compatíveis com {IDENTIFIER_LABELS[kind]}."
+        reason = f"{matched} of {tested} evaluated values match {IDENTIFIER_LABELS[kind]}."
         scored.append(DetectionResult(kind, confidence, matched, tested, reason, multiple and kind == IdentifierType.UNIPROT))
 
     gene_headers = ("gene", "gene symbol", "gene names", "hgnc", "symbol")
@@ -116,7 +116,7 @@ def detect_identifier(column_name: str, series: pd.Series) -> DetectionResult:
         gene_confidence,
         gene_matches,
         tested,
-        f"{gene_matches} de {tested} valores parecem símbolos; confirmação é recomendada.",
+        f"{gene_matches} of {tested} values look like gene symbols; confirmation is recommended.",
     ))
 
     entrez_matches, tested, _ = _ratio(values, _INTEGER)
@@ -128,8 +128,8 @@ def detect_identifier(column_name: str, series: pd.Series) -> DetectionResult:
         min(0.94, entrez_confidence),
         entrez_matches,
         tested,
-        f"{entrez_matches} de {tested} valores são inteiros; o cabeçalho "
-        + ("apoia Entrez." if entrez_hint else "não confirma que sejam Entrez."),
+        f"{entrez_matches} of {tested} values are integers; the header "
+        + ("supports Entrez." if entrez_hint else "does not confirm they are Entrez IDs."),
     ))
 
     best = max(scored, key=lambda item: item.confidence)
@@ -139,7 +139,7 @@ def detect_identifier(column_name: str, series: pd.Series) -> DetectionResult:
             best.confidence,
             best.matched_values,
             best.tested_values,
-            "Nenhum padrão de identificador atingiu confiança suficiente. " + best.reason,
+            "No identifier pattern reached sufficient confidence. " + best.reason,
             best.contains_multiple,
         )
     return best

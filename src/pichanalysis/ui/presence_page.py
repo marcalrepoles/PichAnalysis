@@ -32,23 +32,23 @@ class PresencePage(QWidget):
         self.quant_type = QComboBox()
         self.conditions = QListWidget()
         self.conditions.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        self.zero_missing = QCheckBox("Sim — zero é ausência")
+        self.zero_missing = QCheckBox("Yes — zero means absence")
         self.zero_missing.setChecked(True)
         self.threshold = QDoubleSpinBox(); self.threshold.setRange(-1e15,1e15); self.threshold.setDecimals(6)
-        self.rule_mode = QComboBox(); self.rule_mode.addItem("Número mínimo de réplicas","count"); self.rule_mode.addItem("Fração mínima de réplicas","fraction")
+        self.rule_mode = QComboBox(); self.rule_mode.addItem("Minimum number of replicates","count"); self.rule_mode.addItem("Minimum fraction of replicates","fraction")
         self.rule_value = QDoubleSpinBox(); self.rule_value.setRange(.01,1e6); self.rule_value.setDecimals(3)
-        self.predominant = QCheckBox("Calcular categoria exploratória predominante"); self.predominant.setChecked(True)
-        self.column_table = QTableWidget(0,4); self.column_table.setHorizontalHeaderLabels(["Coluna","Condição","Réplica","Tipo"])
+        self.predominant = QCheckBox("Calculate predominant exploratory category"); self.predominant.setChecked(True)
+        self.column_table = QTableWidget(0,4); self.column_table.setHorizontalHeaderLabels(["Column","Condition","Replicate","Type"])
         self.method = QPlainTextEdit(); self.method.setReadOnly(True); self.method.setMaximumHeight(120)
-        self.readiness = QLabel("Abra um projeto."); self.readiness.setWordWrap(True)
-        self.run_button = QPushButton("Executar análise"); self.run_button.setEnabled(False)
+        self.readiness = QLabel("Open a project."); self.readiness.setWordWrap(True)
+        self.run_button = QPushButton("Run analysis"); self.run_button.setEnabled(False)
         self.progress = QProgressBar(); self.progress.setRange(0,0); self.progress.hide()
-        form = QFormLayout(); form.addRow("Quantificação usada",self.quant_type); form.addRow("Condições",self.conditions)
-        form.addRow("Zero como ausência",self.zero_missing); form.addRow("Detection threshold",self.threshold)
-        form.addRow("Critério",self.rule_mode); form.addRow("Valor mínimo",self.rule_value)
-        form.addRow("Exploratório",self.predominant)
+        form = QFormLayout(); form.addRow("Quantification used",self.quant_type); form.addRow("Conditions",self.conditions)
+        form.addRow("Zero as absence",self.zero_missing); form.addRow("Detection threshold",self.threshold)
+        form.addRow("Criterion",self.rule_mode); form.addRow("Minimum value",self.rule_value)
+        form.addRow("Exploratory",self.predominant)
         config = QWidget(); config_layout=QVBoxLayout(config); config_layout.addLayout(form); config_layout.addWidget(self.column_table)
-        config_layout.addWidget(QLabel("Método")); config_layout.addWidget(self.method); config_layout.addWidget(self.readiness)
+        config_layout.addWidget(QLabel("Method")); config_layout.addWidget(self.method); config_layout.addWidget(self.readiness)
         config_layout.addWidget(self.run_button); config_layout.addWidget(self.progress)
         self.summary=QLabel("No results available."); self.summary.setWordWrap(True)
         self.filter=QComboBox(); self.filter.addItem("All")
@@ -88,7 +88,7 @@ class PresencePage(QWidget):
         if not self.project or not self.quant_type.currentText(): self.run_button.setEnabled(False); return
         kind=self.quant_type.currentText(); columns=[x for x in quantitative_columns(self.project) if x["quantification_type"]==kind]
         for condition,count in replicate_counts(self.project,kind).items():
-            item=QListWidgetItem(f"{condition} — {count} réplica(s)"); item.setData(Qt.ItemDataRole.UserRole,condition); item.setSelected(True); self.conditions.addItem(item)
+            item=QListWidgetItem(f"{condition} — {count} replicate(s)"); item.setData(Qt.ItemDataRole.UserRole,condition); item.setSelected(True); self.conditions.addItem(item)
         self.column_table.setRowCount(len(columns))
         for row,item in enumerate(columns):
             for col,key in enumerate(("column","condition","replicate","quantification_type")): self.column_table.setItem(row,col,QTableWidgetItem(item[key]))
@@ -105,10 +105,10 @@ class PresencePage(QWidget):
     def _refresh_method(self) -> None:
         if not self.project: return
         kind=self.quant_type.currentText(); state=presence_readiness(self.project,kind or None); selected=self.selected_conditions()
-        counts=replicate_counts(self.project,kind) if kind else {}; description="; ".join(f"{c}: {counts[c]} réplica(s)" for c in selected)
-        rule=(f"pelo menos {self.rule_value.value():g} réplica(s)" if self.rule_mode.currentData()=="count" else f"fração mínima {self.rule_value.value():g}")
-        zero="Zero será tratado como ausência." if self.zero_missing.isChecked() else "Zero poderá ser considerado detectado no threshold zero."
-        self.method.setPlainText(f"{description}\nDetectada quando o valor atende ao threshold {self.threshold.value():g}. {zero}\nReprodutível quando detectada em {rule}. Specific exige ausência completa na condição oposta.")
+        counts=replicate_counts(self.project,kind) if kind else {}; description="; ".join(f"{c}: {counts[c]} replicate(s)" for c in selected)
+        rule=(f"at least {self.rule_value.value():g} replicate(s)" if self.rule_mode.currentData()=="count" else f"minimum fraction {self.rule_value.value():g}")
+        zero="Zero will be treated as absence." if self.zero_missing.isChecked() else "Zero may be considered detected at a zero threshold."
+        self.method.setPlainText(f"{description}\nDetected when the value meets the threshold {self.threshold.value():g}. {zero}\nReproducible when detected in {rule}. Specific requires complete absence in the opposite condition.")
         self.readiness.setText(state.reason); self.run_button.setEnabled(state.ready and bool(selected))
 
     def _emit_run(self) -> None:
@@ -120,7 +120,7 @@ class PresencePage(QWidget):
 
     def show_outputs(self,outputs:PresenceOutputs) -> None:
         self.outputs=outputs; counts=outputs.metadata.get("classification_counts",{})
-        self.summary.setText(f"Linhas analisadas: {outputs.metadata.get('total_entities',0)} | "+" | ".join(f"{k}: {v}" for k,v in counts.items()))
+        self.summary.setText(f"Rows analyzed: {outputs.metadata.get('total_entities',0)} | "+" | ".join(f"{k}: {v}" for k,v in counts.items()))
         self.filter.clear(); self.filter.addItem("All"); self.filter.addItems(sorted(counts)); self._fill_table()
         self.graph_picker.clear()
         for path in outputs.graphs: self.graph_picker.addItem(path.stem,str(path))

@@ -45,7 +45,7 @@ def test_possible_gene_symbols_are_conservative():
     result = detect("Gene names", ["TFAM", "POLG", "NONO", "SFPQ", "LIG3"])
     assert result.detected_type == IdentifierType.GENE_SYMBOL
     assert result.confidence < 0.9
-    assert "confirmação" in result.reason
+    assert "confirmation" in result.reason
 
 
 def test_empty_column_is_unknown():

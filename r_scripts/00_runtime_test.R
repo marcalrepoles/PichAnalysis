@@ -1,5 +1,5 @@
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 1) stop("Informe o caminho do arquivo de saída.")
+if (length(args) < 1) stop("Provide the output file path.")
 lines <- c(
   "status=ok",
   paste0("r_version=", R.version.string),

@@ -1,5 +1,6 @@
 """Offline limma analysis of an immutable Differential Preparation run."""
 from __future__ import annotations
+from .resources import r_script, r_scripts_dir
 
 import hashlib
 import json
@@ -230,7 +231,7 @@ def prepare_run(project, run_id, parameters: DifferentialParameters):
     for destination in (run / "input/parameters.json", provenance / "parameters.json"):
         destination.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     shutil.copy2(run / "input/preparation_parameters.json", provenance / "preparation_parameters.json")
-    scripts = Path(__file__).resolve().parents[3] / "r_scripts"
+    scripts = r_scripts_dir()
     for source in (scripts / "13_differential_analysis.R", scripts / "lib/differential_analysis.R"):
         shutil.copy2(source, provenance / source.name)
     return run, provenance
@@ -269,7 +270,7 @@ def load_run(project, run_id):
 def run_differential_analysis(project, runtime: RRuntime, *, run_id,
                               parameters: DifferentialParameters, script=None, timeout=300):
     run, provenance = prepare_run(project, run_id, parameters)
-    entry = script or Path(__file__).resolve().parents[3] / "r_scripts/13_differential_analysis.R"
+    entry = script or r_script("13_differential_analysis.R")
     try:
         result = runtime.run(entry, "--run", str(run), "--provenance", str(provenance), timeout=timeout)
     except RuntimeError as error:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from ..core.external_process import run_external
 from pathlib import Path
 
 import pandas as pd
@@ -338,8 +339,8 @@ class DifferentialAnalysisPage(QWidget):
         if self.runtime.executable:
             expression = 'cat(as.integer(vapply(c("MsCoreUtils","imputeLCMD","impute"), requireNamespace, logical(1), quietly=TRUE)), sep=" ")'
             try:
-                result = subprocess.run((self.runtime.executable, "-e", expression),
-                    capture_output=True, text=True, timeout=15, check=False, shell=False)
+                result = run_external((self.runtime.executable, "-e", expression),
+                    capture_output=True, text=True, timeout=15, shell=False)
                 flags = [part == "1" for part in result.stdout.strip().split()]
                 if result.returncode == 0 and len(flags) == 3:
                     available.update({"MinProb": flags[0] and flags[1],

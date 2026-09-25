@@ -43,7 +43,7 @@ def test_background_selection(tmp_path):
 
 def test_target_outside_background_is_reported(tmp_path):
     project=go_project(tmp_path);params=base_parameters();params["target_selection"]="all_experiment"
-    with pytest.raises(ValueError,match="não pertencem"):
+    with pytest.raises(ValueError,match="outside the selected background"):
         prepare_go_arguments(project,**params)
 
 
@@ -81,4 +81,4 @@ def test_blocked_without_mappable_catalog(tmp_path):
 
 def test_unsupported_organism(tmp_path):
     project=create_project(tmp_path,"Other");set_organism(project,"Danio rerio","7955")
-    assert "não configurado" in go_readiness(project).reason
+    assert "not configured" in go_readiness(project).reason

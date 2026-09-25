@@ -9,7 +9,7 @@ validate_uniprot_database <- function(id_type) {
   names_available <- unlist(lapply(payload$groups %||% list(), function(group)
     vapply(group$items %||% list(), function(item) if (isTRUE(item$from)) item$name %||% "" else "", character(1))))
   expected <- unname(UNIPROT_DATABASES[[id_type]])
-  if (is.null(expected) || !expected %in% names_available) stop("Banco de origem não aceito pela API UniProt atual: ", expected)
+  if (is.null(expected) || !expected %in% names_available) stop("Source database is not accepted by the current UniProt API: ", expected)
   payload
 }
 
@@ -23,7 +23,7 @@ perform_request <- function(request, attempts = 5) {
 
 submit_uniprot_job <- function(ids, id_type, tax_id) {
   from <- unname(UNIPROT_DATABASES[[id_type]])
-  if (is.null(from)) stop("Tipo de identificador não suportado pelo UniProt: ", id_type)
+  if (is.null(from)) stop("Identifier type is not supported by UniProt: ", id_type)
   body <- list(from = from, to = "UniProtKB", ids = paste(ids, collapse = ","))
   if (identical(id_type, "gene_symbol")) body$taxId <- tax_id
   response <- perform_request(httr2::request(paste0(UNIPROT_BASE, "/idmapping/run")) |>

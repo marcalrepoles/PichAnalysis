@@ -5,14 +5,14 @@ source(file.path(script_root,"lib","common.R"))
 source(file.path(script_root,"lib","presence_absence.R"))
 needed <- c("jsonlite","readr","openxlsx","ggplot2")
 missing <- needed[!vapply(needed,requireNamespace,logical(1),quietly=TRUE)]
-if (length(missing)) stop("Pacotes R ausentes: ",paste(missing,collapse=", "))
+if (length(missing)) stop("Missing R packages: ",paste(missing,collapse=", "))
 parameters <- parse_arguments(commandArgs(trailingOnly=TRUE), c("input","output","project","identifier-column","identifier-type",
   "quantification-type","column-map","conditions","zero-is-missing","threshold","rule-mode","rule-value","predominant","run-id"))
 started <- format(Sys.time(),tz="UTC",usetz=TRUE)
 output_root <- normalizePath(parameters$output,winslash="/",mustWork=FALSE)
 run_root <- file.path(output_root,"runs",parameters$`run-id`)
 snapshot <- file.path(parameters$project,"scripts","runs",paste0(parameters$`run-id`,"_presence_absence"))
-if (dir.exists(run_root)||dir.exists(snapshot)) stop("run_id já existe; histórico não será sobrescrito.")
+if (dir.exists(run_root)||dir.exists(snapshot)) stop("run_id already exists; history will not be overwritten.")
 run_tables <- file.path(run_root,"tables"); run_graphs <- file.path(run_root,"graphs")
 latest_tables <- file.path(output_root,"tables"); latest_graphs <- file.path(output_root,"graphs")
 for (path in c(run_tables,run_graphs,latest_tables,latest_graphs,file.path(output_root,"raw"),snapshot)) dir.create(path,recursive=TRUE,showWarnings=FALSE)
@@ -68,7 +68,7 @@ sample_labels <- vapply(column_map,function(x) paste(x$condition,x$replicate,sep
 sample_counts <- data.frame(sample=sample_labels,condition=vapply(column_map,function(x)x$condition,character(1)),
   replicate=vapply(column_map,function(x)x$replicate,character(1)),count=colSums(result$presence[vapply(column_map,function(x)x$column,character(1))]))
 p1 <- ggplot2::ggplot(sample_counts,ggplot2::aes(sample,count,fill=condition))+ggplot2::geom_col()+
-  ggplot2::labs(x="Condição / réplica",y="Proteínas detectadas",title="Proteínas detectadas por réplica")+
+  ggplot2::labs(x="Condition / replicate",y="Detected proteins",title="Proteins detected per replicate")+
   ggplot2::theme_minimal()+ggplot2::theme(axis.text.x=ggplot2::element_text(angle=45,hjust=1))
 save_plot(p1,"protein_count_per_sample")
 
@@ -77,7 +77,7 @@ patterns <- apply(binary,1,paste0,collapse="")
 pattern_counts <- as.data.frame(table(patterns),stringsAsFactors=FALSE); names(pattern_counts)<-c("pattern","count")
 p2 <- ggplot2::ggplot(pattern_counts,ggplot2::aes(reorder(pattern,count),count))+
   ggplot2::geom_col(fill="#3B82F6")+ggplot2::coord_flip()+
-  ggplot2::labs(x="Padrão binário de pertencimento (ordem das réplicas)",y="Interseção",title="UpSet — interseções entre réplicas")+ggplot2::theme_minimal()
+  ggplot2::labs(x="Binary membership pattern (replicate order)",y="Intersection",title="UpSet — intersections among replicates")+ggplot2::theme_minimal()
 save_plot(p2,"upset_intersections")
 
 heatmap_note <- "all rows"
@@ -86,8 +86,8 @@ if (length(heat_rows)>200) { heat_rows <- order(rowSums(binary),decreasing=TRUE)
 long <- data.frame(source_row=rep(result$identity$source_row[heat_rows],times=ncol(binary)),
   sample=rep(sample_labels,each=length(heat_rows)),presence=unlist(binary[heat_rows,,drop=FALSE],use.names=FALSE))
 p3 <- ggplot2::ggplot(long,ggplot2::aes(sample,factor(source_row),fill=factor(presence)))+ggplot2::geom_tile()+
-  ggplot2::scale_fill_manual(values=c("0"="white","1"="#2563EB"),name="Detectada")+
-  ggplot2::labs(x="Réplica",y="Linha experimental",title="Heatmap binário de presença/ausência")+ggplot2::theme_minimal()+
+  ggplot2::scale_fill_manual(values=c("0"="white","1"="#2563EB"),name="Detected")+
+  ggplot2::labs(x="Replicate",y="Experimental row",title="Binary presence/absence heatmap")+ggplot2::theme_minimal()+
   ggplot2::theme(axis.text.y=ggplot2::element_blank(),axis.ticks.y=ggplot2::element_blank(),axis.text.x=ggplot2::element_text(angle=45,hjust=1))
 save_plot(p3,"presence_heatmap",10,7)
 
@@ -96,8 +96,8 @@ if (length(result$conditions)==2) {
   b <- result$detection[result$detection$condition==result$conditions[[2]],]
   scatter <- data.frame(a=a$detection_fraction,b=b$detection_fraction,class=result$classification$classification)
   p4 <- ggplot2::ggplot(scatter,ggplot2::aes(a,b,color=class))+ggplot2::geom_point(alpha=.7)+
-    ggplot2::labs(x=paste("Fração detectada",result$conditions[[1]]),y=paste("Fração detectada",result$conditions[[2]]),
-      title="Fração de detecção entre condições",color="Classificação")+ggplot2::theme_minimal()
+    ggplot2::labs(x=paste("Detected fraction",result$conditions[[1]]),y=paste("Detected fraction",result$conditions[[2]]),
+      title="Detection fraction across conditions",color="Classification")+ggplot2::theme_minimal()
   save_plot(p4,"detection_fraction")
 }
 

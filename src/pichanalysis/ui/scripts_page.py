@@ -18,7 +18,7 @@ class ScriptsPage(QWidget):
         self.scripts_dir = scripts_dir
         self.project_scripts_dir: Path | None = None
         self.runtime_status = QLabel()
-        self.test_button = QPushButton("Testar R")
+        self.test_button = QPushButton("Test R")
         self.script_picker = QComboBox()
         self.script_view = QPlainTextEdit()
         self.script_view.setReadOnly(True)
@@ -28,10 +28,10 @@ class ScriptsPage(QWidget):
         layout.addWidget(QLabel("R Runtime"))
         layout.addWidget(self.runtime_status)
         layout.addWidget(self.test_button)
-        layout.addWidget(QLabel("Scripts R do aplicativo"))
+        layout.addWidget(QLabel("Application R scripts"))
         layout.addWidget(self.script_picker)
         layout.addWidget(self.script_view, 2)
-        layout.addWidget(QLabel("Resultado / Logs da sessão"))
+        layout.addWidget(QLabel("Result / Session logs"))
         layout.addWidget(self.result_view, 1)
         self.test_button.clicked.connect(self.test_requested)
         self.script_picker.currentTextChanged.connect(self._show_script)

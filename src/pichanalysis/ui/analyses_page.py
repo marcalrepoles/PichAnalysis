@@ -44,9 +44,9 @@ class AnalysesPage(QWidget):
         self.organism = QComboBox()
         for item in COMMON_ORGANISMS:
             self.organism.addItem(f"{item.name} — {item.tax_id}", (item.name, item.tax_id))
-        self.organism.addItem("Outro...", None)
+        self.organism.addItem("Other...", None)
         self.custom_name = QLineEdit()
-        self.custom_name.setPlaceholderText("Nome científico")
+        self.custom_name.setPlaceholderText("Scientific name")
         self.custom_tax_id = QLineEdit()
         self.custom_tax_id.setPlaceholderText("NCBI Taxonomy ID")
         self.save_organism = QPushButton("Save organism")
@@ -55,16 +55,16 @@ class AnalysesPage(QWidget):
         self.record_count = QLabel("0")
         form = QFormLayout()
         form.addRow("Organism", self.organism)
-        form.addRow("Nome personalizado", self.custom_name)
+        form.addRow("Custom name", self.custom_name)
         form.addRow("Taxonomy ID", self.custom_tax_id)
-        form.addRow("Identificador principal", self.identifier)
+        form.addRow("Primary identifier", self.identifier)
         form.addRow("Identifier type", self.identifier_type)
-        form.addRow("Número de registros", self.record_count)
-        self.readiness = QLabel("Abra um projeto.")
+        form.addRow("Record count", self.record_count)
+        self.readiness = QLabel("Open a project.")
         self.readiness.setWordWrap(True)
-        self.refresh = QCheckBox("Atualizar anotações online")
-        self.refresh.setToolTip("Desmarcado: usar dados já disponíveis no cache quando possível.")
-        self.run_button = QPushButton("Mapear e anotar proteínas")
+        self.refresh = QCheckBox("Refresh online annotations")
+        self.refresh.setToolTip("Unchecked: use data already available in the cache when possible.")
+        self.run_button = QPushButton("Map and annotate proteins")
         self.run_button.setEnabled(False)
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
@@ -75,8 +75,8 @@ class AnalysesPage(QWidget):
         self.detail = QPlainTextEdit()
         self.detail.setReadOnly(True)
         result_tabs = QTabWidget()
-        result_tabs.addTab(self.preview, "Catálogo")
-        result_tabs.addTab(self.detail, "Detalhes da linha")
+        result_tabs.addTab(self.preview, "Catalog")
+        result_tabs.addTab(self.detail, "Row details")
         self.export_table = QPushButton("Export table...")
         self.export_workbook = QPushButton("Export workbook...")
         self.open_results = QPushButton("Open results folder")
@@ -88,7 +88,7 @@ class AnalysesPage(QWidget):
             actions.addWidget(button)
         mapping_page = QWidget()
         layout = QVBoxLayout(mapping_page)
-        layout.addWidget(QLabel("Identificação e anotação"))
+        layout.addWidget(QLabel("Identification and Annotation"))
         layout.addLayout(form)
         layout.addWidget(self.save_organism)
         layout.addWidget(self.readiness)
@@ -130,7 +130,7 @@ class AnalysesPage(QWidget):
             attach_explore_action(page, module_id, self.explore_context)
         module_tabs = QTabWidget()
         self.module_tabs = module_tabs
-        module_tabs.addTab(mapping_page, "Identificação e anotação")
+        module_tabs.addTab(mapping_page, "Identification and Annotation")
         module_tabs.addTab(self.presence_page, "Presence / absence")
         module_tabs.addTab(self.go_page, "Gene Ontology")
         module_tabs.addTab(self.kegg_page, "KEGG Pathways")
@@ -257,13 +257,13 @@ class AnalysesPage(QWidget):
     def set_running(self, running: bool) -> None:
         self.progress.setVisible(running)
         self.run_button.setEnabled(not running and mapping_readiness(self.project).ready)
-        self.readiness.setText("Em execução..." if running else mapping_readiness(self.project).reason)
+        self.readiness.setText("Running..." if running else mapping_readiness(self.project).reason)
 
     def show_outputs(self, outputs: MappingOutputs) -> None:
         meta = outputs.metadata
         self.summary.setText(
-            f"IDs de entrada: {meta.get('input_count', 0)} | IDs únicos: {meta.get('unique_id_count', 0)} | "
-            f"Mapeados unicamente: {meta.get('mapped_unique_count', 0)} | Ambíguos: {meta.get('ambiguous_count', 0)} | "
+            f"Input IDs: {meta.get('input_count', 0)} | Unique IDs: {meta.get('unique_id_count', 0)} | "
+            f"Uniquely mapped: {meta.get('mapped_unique_count', 0)} | Ambiguous: {meta.get('ambiguous_count', 0)} | "
             f"Unmapped: {meta.get('unmapped_count', 0)} | Organism mismatches: {meta.get('organism_mismatch_count', 0)}"
         )
         frame = outputs.catalog.head(200)

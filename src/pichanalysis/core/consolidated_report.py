@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QMarginsF, QUrl
-from PySide6.QtGui import QFont, QFontDatabase, QPageLayout, QPageSize, QPdfWriter, QTextDocument
+from PySide6.QtGui import QFont, QFontDatabase, QImage, QPageLayout, QPageSize, QPdfWriter, QTextDocument
 
 
 SCHEMA_VERSION = 1
@@ -313,7 +313,15 @@ def _render_pdf(html_path: Path, pdf_path: Path) -> None:
         raise ReportError("pdf_font_unavailable", "No local font is available for readable PDF output.")
     document = QTextDocument()
     document.setDefaultFont(QFont("Arial" if "Arial" in QFontDatabase.families() else QFontDatabase.families()[0]))
-    document.setBaseUrl(QUrl.fromLocalFile(str(html_path.parent.resolve()) + os.sep))
+    base_url = QUrl.fromLocalFile(str(html_path.parent.resolve()) + os.sep)
+    document.setBaseUrl(base_url)
+    for asset in (html_path.parent / "assets").rglob("*.png"):
+        image = QImage(str(asset))
+        if image.isNull():
+            raise ReportError("pdf_image_failed", f"Could not load report figure: {asset.name}")
+        relative_url = QUrl(asset.relative_to(html_path.parent).as_posix())
+        document.addResource(QTextDocument.ResourceType.ImageResource, relative_url, image)
+        document.addResource(QTextDocument.ResourceType.ImageResource, base_url.resolved(relative_url), image)
     document.setHtml(html_path.read_text(encoding="utf-8"))
     writer = QPdfWriter(str(pdf_path))
     writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))

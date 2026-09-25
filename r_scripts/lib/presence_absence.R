@@ -33,10 +33,10 @@ classify_two <- function(a_detected, b_detected, a_repro, b_repro, a_fraction, b
 
 analyze_presence <- function(input, identifier_column, column_map, threshold, zero_is_missing,
                              rule_mode, rule_value, predominant=TRUE) {
-  if (!identifier_column %in% names(input)) stop("Coluna identificadora ausente.")
+  if (!identifier_column %in% names(input)) stop("Identifier column is missing.")
   quantitative <- vapply(column_map, function(x) x$column, character(1))
   absent <- setdiff(quantitative, names(input))
-  if (length(absent)) stop("Colunas quantitativas ausentes: ", paste(absent, collapse=", "))
+  if (length(absent)) stop("Quantitative columns are missing: ", paste(absent, collapse=", "))
   identity <- data.frame(source_row=seq_len(nrow(input)), original_id=as.character(input[[identifier_column]]),
     identifier_type=NA_character_, protein_group=grepl("[;[:space:]]", as.character(input[[identifier_column]])), stringsAsFactors=FALSE)
   binary <- as.data.frame(lapply(input[quantitative], presence_from_values,

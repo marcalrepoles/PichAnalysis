@@ -141,9 +141,9 @@ def validate_mapping(columns: dict[str, dict[str, Any]]) -> MappingValidation:
         errors.append("Select only one primary identifier.")
     for name, item in identifiers:
         if item.get("identifier_type", IdentifierType.UNKNOWN.value) == IdentifierType.UNKNOWN.value:
-            errors.append(f"A coluna {name} foi marcada como Identifier mas não possui tipo definido.")
+            errors.append(f"Column {name} is marked as Identifier but has no defined type.")
         if item.get("detection", {}).get("contains_multiple"):
-            warnings.append(f"A coluna {name} contém células com múltiplos identificadores.")
+            warnings.append(f"Column {name} contains cells with multiple identifiers.")
     combinations: dict[tuple[str, str], str] = {}
     for name, item in columns.items():
         if item.get("role") != ColumnRole.QUANTIFICATION.value:
@@ -156,7 +156,7 @@ def validate_mapping(columns: dict[str, dict[str, Any]]) -> MappingValidation:
             key = (condition.casefold(), replicate.casefold())
             if key in combinations:
                 errors.append(
-                    f"As colunas {combinations[key]} e {name} usam a mesma combinação condição/réplica."
+                    f"Columns {combinations[key]} and {name} use the same condition/replicate combination."
                 )
             else:
                 combinations[key] = name

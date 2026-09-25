@@ -21,7 +21,7 @@ class MappingWorker(QThread):
             if result.returncode == 0:
                 self.succeeded.emit(result.stdout, result.stderr)
             else:
-                self.failed.emit(f"R terminou com código {result.returncode}.", result.stderr)
+                self.failed.emit(f"R exited with code {result.returncode}.", result.stderr)
         except Exception as error:
             self.failed.emit(str(error), "")
 
