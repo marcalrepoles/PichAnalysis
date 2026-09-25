@@ -5,7 +5,7 @@ from typing import Any
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem,
+    QPlainTextEdit, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QMessageBox,
     QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -25,7 +25,8 @@ from .mtdna_page import MtdnaPage
 from .proteomics_qc_page import ProteomicsQCPage
 from .differential_analysis_page import DifferentialAnalysisPage
 from .cross_module_explorer import CrossModuleExplorer
-from .cross_module_actions import attach_explore_action
+from .biological_context_page import BiologicalContextPage
+from .cross_module_actions import attach_explore_action, attach_biological_context_action
 from .cross_module_navigation import open_persisted_target
 from ..core.cross_module_integration import default_registry
 from ..core.database_manager import DatabaseManager
@@ -82,8 +83,11 @@ class AnalysesPage(QWidget):
         self.open_results = QPushButton("Open results folder")
         self.explore_mapping = QPushButton("Explore across analyses...")
         self.explore_mapping.clicked.connect(self._explore_mapping)
+        self.mapping_biological_context = QPushButton("Biological context...")
+        self.mapping_biological_context.clicked.connect(self._mapping_biological_context)
+        self.preview.itemSelectionChanged.connect(lambda: self.mapping_biological_context.setEnabled(bool(self.project and self.preview.selectedItems())))
         actions = QHBoxLayout()
-        for button in (self.export_table, self.export_workbook, self.open_results, self.explore_mapping):
+        for button in (self.export_table, self.export_workbook, self.open_results, self.explore_mapping, self.mapping_biological_context):
             button.setEnabled(False)
             actions.addWidget(button)
         mapping_page = QWidget()
@@ -118,6 +122,9 @@ class AnalysesPage(QWidget):
         self.proteomics_qc_page = ProteomicsQCPage()
         self.differential_analysis_page = DifferentialAnalysisPage()
         self.cross_module_explorer = CrossModuleExplorer()
+        self.biological_context_page = BiologicalContextPage()
+        self.cross_module_explorer.biological_context_requested.connect(self._open_entity_context)
+        self.differential_analysis_page.biological_context_requested.connect(self.open_biological_context)
         self.cross_module_explorer.open_target_requested.connect(self.open_analysis_target)
         self.differential_analysis_page.explore_requested.connect(self.explore_context)
         self.proteomics_qc_page.explore_requested.connect(self.explore_context)
@@ -128,6 +135,8 @@ class AnalysesPage(QWidget):
             ("string", self.string_page), ("complexes", self.complex_page),
             ("mtdna_evidence", self.mtdna_page)):
             attach_explore_action(page, module_id, self.explore_context)
+            if module_id in {"kegg", "reactome", "string"}:
+                attach_biological_context_action(page, module_id, self.open_biological_context)
         module_tabs = QTabWidget()
         self.module_tabs = module_tabs
         module_tabs.addTab(mapping_page, "Identification and Annotation")
@@ -143,6 +152,7 @@ class AnalysesPage(QWidget):
         module_tabs.addTab(self.proteomics_qc_page, "Proteomics QC")
         module_tabs.addTab(self.differential_analysis_page, "Differential Analysis")
         module_tabs.addTab(self.cross_module_explorer, "Cross-module Explorer")
+        module_tabs.addTab(self.biological_context_page, "Biological Context")
         outer_layout = QVBoxLayout(self)
         outer_layout.addWidget(module_tabs)
 
@@ -150,6 +160,41 @@ class AnalysesPage(QWidget):
         self.module_tabs.setCurrentWidget(self.cross_module_explorer)
         self.cross_module_explorer.explore_feature(module_id, run_id, feature_id)
 
+    def open_biological_context(self, module_id: str, run_id: str,
+                                identifier: str, source_row=None) -> None:
+        if not self.project:
+            return
+        self.module_tabs.setCurrentWidget(self.biological_context_page)
+        try:
+            self.biological_context_page.open_entity(module_id, run_id, identifier, source_row)
+        except Exception as error:
+            self.biological_context_page.notice.setText(str(error))
+            QMessageBox.warning(self, "Biological context unavailable", str(error))
+
+    def _open_entity_context(self, context) -> None:
+        identifier = context.feature_id or context.original_identifier or (
+            context.uniprot_accessions[0] if len(context.uniprot_accessions) == 1 else "")
+        self.open_biological_context(context.source_module, context.source_run_id,
+            identifier, context.source_row)
+
+    def _mapping_biological_context(self) -> None:
+        if not self.project or self.preview.currentRow() < 0:
+            return
+        from ..core.mapping_analysis import read_mapping_outputs
+        try:
+            outputs = read_mapping_outputs(self.project)
+            headers = {self.preview.horizontalHeaderItem(column).text(): column
+                for column in range(self.preview.columnCount())}
+            row = self.preview.currentRow()
+            source = self.preview.item(row, headers["source_row"]).text() if "source_row" in headers else ""
+            identifier = next((self.preview.item(row, headers[name]).text() for name in
+                ("original_id", "uniprot_accession", "gene_symbol")
+                if name in headers and self.preview.item(row, headers[name]) and
+                self.preview.item(row, headers[name]).text()), "")
+            self.open_biological_context("mapping", str(outputs.metadata.get("run_id", "")),
+                identifier or source, int(source) if source.isdigit() else None)
+        except (OSError, RuntimeError, KeyError) as error:
+            QMessageBox.warning(self, "Biological context unavailable", str(error))
     def _explore_mapping(self) -> None:
         row = self.preview.currentRow()
         if row < 0 or not self.project:
@@ -234,6 +279,7 @@ class AnalysesPage(QWidget):
         self.proteomics_qc_page.set_project(project)
         self.differential_analysis_page.set_project(project)
         self.cross_module_explorer.set_project(project)
+        self.biological_context_page.set_project(project)
         if project is None:
             self.run_button.setEnabled(False)
             return
@@ -272,8 +318,9 @@ class AnalysesPage(QWidget):
         for row, values in enumerate(frame.itertuples(index=False, name=None)):
             for column, value in enumerate(values):
                 self.preview.setItem(row, column, QTableWidgetItem("" if value is None else str(value)))
-        for button in (self.export_table, self.export_workbook, self.open_results, self.explore_mapping):
+        for button in (self.export_table, self.export_workbook, self.open_results, self.explore_mapping, self.mapping_biological_context):
             button.setEnabled(True)
+        self.mapping_biological_context.setEnabled(bool(self.preview.selectedItems()))
 
     def _show_detail(self, row: int, _column: int, _old_row: int, _old_column: int) -> None:
         if row < 0:

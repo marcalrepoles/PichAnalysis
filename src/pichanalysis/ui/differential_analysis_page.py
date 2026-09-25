@@ -61,6 +61,7 @@ class DifferentialWorker(QThread):
 
 class DifferentialAnalysisPage(QWidget):
     explore_requested = Signal(str, str, str)
+    biological_context_requested = Signal(str, str, str, object)
 
     def __init__(self, runtime=None):
         super().__init__()
@@ -99,6 +100,7 @@ class DifferentialAnalysisPage(QWidget):
                 value = str(values.get(key, ""))
                 item = QTableWidgetItem(value if value and value.lower() not in ("nan", "na") else "NA")
                 item.setData(Qt.ItemDataRole.UserRole, str(values.get("feature_id", "")))
+                item.setData(Qt.ItemDataRole.UserRole + 1, str(values.get("source_row", "")))
                 table.setItem(row, column, item)
         table.setSortingEnabled(True)
 
@@ -294,6 +296,11 @@ class DifferentialAnalysisPage(QWidget):
         self.explore_button = QPushButton("Explore across analyses...")
         self.explore_button.clicked.connect(self._explore_selected)
         actions.addWidget(self.explore_button)
+        self.biological_context_button = QPushButton("Biological context...")
+        self.biological_context_button.setEnabled(False)
+        self.biological_context_button.clicked.connect(self._open_biological_context)
+        self.results_table.itemSelectionChanged.connect(lambda: self.biological_context_button.setEnabled(bool(self.statistics and self.results_table.selectedItems())))
+        actions.addWidget(self.biological_context_button)
         layout.addLayout(actions)
         self.stage_tabs.addTab(page, "Results & history")
 
@@ -726,6 +733,15 @@ class DifferentialAnalysisPage(QWidget):
             return
         feature_id = self.results_table.selectedItems()[0].data(Qt.ItemDataRole.UserRole)
         self.explore_requested.emit("differential", self.statistics["metadata"]["run_id"], feature_id)
+    def _open_biological_context(self):
+        if not self.statistics or not self.results_table.selectedItems():
+            return
+        cell = self.results_table.selectedItems()[0]
+        feature_id = str(cell.data(Qt.ItemDataRole.UserRole) or "")
+        source_row = str(cell.data(Qt.ItemDataRole.UserRole + 1) or "")
+        self.biological_context_requested.emit("differential",
+            str(self.statistics["metadata"]["run_id"]), feature_id,
+            int(source_row) if source_row.isdigit() else None)
     def _open_results(self):
         if self.statistics: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.statistics["run_root"])))
 

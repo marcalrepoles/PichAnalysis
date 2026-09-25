@@ -15,6 +15,7 @@ from ..core.entity_identity import MatchStatus
 
 class CrossModuleExplorer(QWidget):
     open_target_requested = Signal(str, str, str, str, str)
+    biological_context_requested = Signal(object)
 
     def __init__(self):
         super().__init__()
@@ -51,6 +52,9 @@ class CrossModuleExplorer(QWidget):
         self.open_button.setEnabled(False)
         self.export_button = QPushButton("Export cross-module summary...")
         actions.addWidget(self.open_button); actions.addWidget(self.export_button)
+        self.biological_context_button = QPushButton("Biological context...")
+        self.biological_context_button.setEnabled(False)
+        actions.addWidget(self.biological_context_button)
         layout.addLayout(actions)
         self.status = QLabel("Open a project to explore existing runs.")
         layout.addWidget(self.status)
@@ -62,10 +66,12 @@ class CrossModuleExplorer(QWidget):
         self.cross_lineage.toggled.connect(self._resolve)
         self.open_button.clicked.connect(self._open_target)
         self.export_button.clicked.connect(self._export)
+        self.biological_context_button.clicked.connect(self._open_biological_context)
 
     def set_project(self, project):
         self.project = project
         self.index = None; self.context = None; self.matches = []
+        self.biological_context_button.setEnabled(False)
         self.source_table.setRowCount(0); self.matches_table.setRowCount(0)
         self.identity.clear(); self.details.clear()
         self.status.setText("Search the local index or select a feature in another analysis."
@@ -140,6 +146,7 @@ class CrossModuleExplorer(QWidget):
         record = self.source_records[row]
         self.context = self.index.context(record["id"])
         context = self.context
+        self.biological_context_button.setEnabled(True)
         lines = [f"Source module: {context.source_module}", f"Source run: {context.source_run_id}",
             f"Source result type: {context.source_result_type}",
             "Experimental identity:", f"  Feature ID: {context.feature_id or 'Not available'}",
@@ -197,6 +204,9 @@ class CrossModuleExplorer(QWidget):
             match.target_entity, match.details.get("record_type", ""),
             match.details.get("source_row", ""))
 
+    def _open_biological_context(self):
+        if self.context:
+            self.biological_context_requested.emit(self.context)
     def _export(self):
         if not self.context: return
         path, _ = QFileDialog.getSaveFileName(self, "Export cross-module summary",
